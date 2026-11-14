@@ -7,11 +7,15 @@ import { page } from "@/lib/meta";
 export const metadata: Metadata = page(
   "/changelog",
   "Changelog",
-  "What's new in Sombre, newest first."
+  "What's new in Sombre, newest first: every change to the app and this site as we build toward the first release."
 );
 
 const Changelog = () => (
   <Shell
+    facts={[
+      { label: "Latest", value: format(releases[0]?.date ?? "") },
+      { label: "Releases", value: String(releases.length) },
+    ]}
     lead="What's new in Sombre, newest first. Small, frequent updates while we build toward the first release."
     tag="Changelog"
     title="What changed"

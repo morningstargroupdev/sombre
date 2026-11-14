@@ -29,12 +29,12 @@
 
 > stack?
 
-  apps/web        next.js · typescript · tailwind · bun     the site
-  apps/desktop    tauri · react · typescript · tailwind     the desktop app
-  crates/core     rust                                      session index and readers
-  crates/harness  rust                                      sombre's own agent
-  crates/engine   rust                                      runs a chat with any agent
-  crates/cli      rust                                      the sombre cli
+  apps/web        next.js · typescript · tailwind · gsap · lenis · bun     the site
+  apps/desktop    tauri · react · typescript · tailwind                    the desktop app
+  crates/core     rust                                                     session index and readers
+  crates/harness  rust                                                     sombre's own agent
+  crates/engine   rust                                                     runs a chat with any agent
+  crates/cli      rust                                                     the sombre cli
 
 > develop?
 
