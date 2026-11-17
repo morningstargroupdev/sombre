@@ -1,0 +1,39 @@
+{
+  "name": "sombre",
+  "private": true,
+  "license": "MIT",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "bun run --filter web dev",
+    "build": "bun run --filter web build",
+    "desktop": "bun run --filter desktop tauri dev",
+    "app": "bun run --filter desktop tauri build --bundles app",
+    "cli": "cargo install --quiet --path crates/cli --root ~/.local",
+    "phone": "SOMBRE_PHONE=crates/cli/src sombre resume",
+    "mock": "bun scripts/mock.ts",
+    "check": "ultracite check && cargo fmt --all --check && cargo clippy --all-targets -q && cargo clippy -p sombre-desktop --all-targets -q",
+    "fix": "ultracite fix && cargo fmt --all",
+    "typecheck": "bun run --filter web --filter desktop typecheck",
+    "test": "bun run --filter web --filter desktop test && bun test crates/cli && cargo test -q && cargo test -p sombre-desktop -q",
+    "verify": "bun run check && bun run typecheck && bun run test && bun run build && bun run --filter desktop build",
+    "prepare": "husky",
+    "bench": "bun scripts/bench.ts"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "oxfmt": "^0.75.0",
+    "oxlint": "^1.90.0",
+    "ultracite": "8.1.1"
+  },
+  "packageManager": "bun@1.3.9",
+  "ignoreScripts": [
+    "sharp",
+    "unrs-resolver"
+  ],
+  "trustedDependencies": [
+    "sharp",
+    "unrs-resolver"
+  ]
+}

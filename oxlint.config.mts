@@ -7,4 +7,14 @@ export default defineConfig({
   env: core.env,
   extends: [core, react, next],
   ignorePatterns: core.ignorePatterns,
+  overrides: [
+    {
+      files: ["crates/cli/src/phone.js"],
+      rules: { "no-bitwise": "off" },
+    },
+    {
+      files: ["apps/desktop/**"],
+      rules: { "nextjs/no-img-element": "off" },
+    },
+  ],
 });

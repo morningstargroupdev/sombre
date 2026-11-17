@@ -1,7 +1,9 @@
-/node_modules
+/apps/desktop/src-tauri/gen
+/apps/desktop/dist
 *.tsbuildinfo
 next-env.d.ts
+node_modules
 .vercel
-/.next/
-/out/
+/target
+.next
 .env*
