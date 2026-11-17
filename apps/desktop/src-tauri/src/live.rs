@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -16,6 +16,8 @@ use sombre_harness::config::{Config, Mode};
 use tauri::ipc::Channel;
 
 use crate::feed::{Task, relative};
+
+const IDLE: Duration = Duration::from_millis(100);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Aim {
@@ -175,6 +177,12 @@ impl Gate {
         self.sent = 1;
         self.echoed = 0;
         self.outcome = Outcome::default();
+    }
+
+    pub fn woke(&mut self) {
+        self.begin();
+        self.ours = true;
+        self.sent = 0;
     }
 
     pub fn finish(&mut self) -> Outcome {
@@ -473,6 +481,11 @@ impl Runner {
 
     fn send(&mut self, text: &str) {
         self.start(|engine| engine.send(text));
+    }
+
+    fn wake(&mut self) {
+        self.start(|_| Ok(()));
+        self.gate.woke();
     }
 
     fn start(&mut self, begin: impl FnOnce(&mut Engine) -> io::Result<()>) {
@@ -869,15 +882,19 @@ impl Runner {
                     Err(TryRecvError::Disconnected) => break,
                 }
             } else {
-                match asks.recv() {
+                match asks.recv_timeout(IDLE) {
                     Ok(ask) => Some(ask),
-                    Err(_) => break,
+                    Err(RecvTimeoutError::Timeout) => None,
+                    Err(RecvTimeoutError::Disconnected) => break,
                 }
             };
             if let Some(ask) = ask
                 && !self.handle(ask)
             {
                 break;
+            }
+            if !self.busy && self.engine.woke() {
+                self.wake();
             }
             if self.busy {
                 self.pump();
@@ -1009,6 +1026,24 @@ mod tests {
 
     fn text(value: &str) -> Event {
         Event::Text(value.to_string())
+    }
+
+    #[test]
+    fn a_turn_the_agent_starts_itself_ends_at_its_own_done() {
+        let mut gate = Gate::new(Agent::Claude, Path::new("/work"));
+        gate.woke();
+        assert!(matches!(
+            gate.pass(Event::Text("finished".to_string())),
+            Pass::Show(Update::Text { .. })
+        ));
+        assert!(matches!(
+            gate.pass(Event::Done {
+                cost: None,
+                left: None,
+                millis: None
+            }),
+            Pass::Done { last: true, .. }
+        ));
     }
 
     #[test]
