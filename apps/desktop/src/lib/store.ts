@@ -25,6 +25,7 @@ import {
   stop,
   tune,
 } from "./api";
+import { numbers } from "./inbox";
 import type { Live } from "./live";
 import {
   answered,
@@ -46,6 +47,43 @@ const stories = new Map<string, Entry[]>();
 const unread = new Set<string>();
 let viewing: string | null = null;
 let shown = "";
+
+const SEEN = "sombre.seen";
+const SINCE = "sombre.since";
+const clock = () => Math.floor(Date.now() / 1000);
+
+const recalled = () => {
+  try {
+    return numbers(JSON.parse(localStorage.getItem(SEEN) ?? "{}"));
+  } catch {
+    return {};
+  }
+};
+
+const started = () => {
+  const saved = Number(localStorage.getItem(SINCE));
+  if (saved > 0) {
+    return saved;
+  }
+  const now = clock();
+  localStorage.setItem(SINCE, String(now));
+  return now;
+};
+
+export interface Seen {
+  at: Record<string, number>;
+  since: number;
+}
+
+let glance: Seen = { at: recalled(), since: started() };
+
+const look = (key: string) => {
+  glance = { ...glance, at: { ...glance.at, [key]: clock() } };
+  localStorage.setItem(SEEN, JSON.stringify(glance.at));
+};
+
+export const seenAt = (seen: Seen, key: string) =>
+  Math.max(seen.at[key] ?? 0, seen.since);
 
 export type Event = "done" | "ask" | "failed";
 
@@ -201,12 +239,20 @@ export const useBusy = () => useSyncExternalStore(subscribe, () => busy);
 
 export const useMarks = () => useSyncExternalStore(subscribe, () => shown);
 
+export const useSeen = () => useSyncExternalStore(subscribe, () => glance);
+
 export const alerts = (handler: (key: string, event: Event) => void) => {
   alerting = handler;
 };
 
 export const view = (key: string | null) => {
+  if (viewing && viewing !== key) {
+    look(viewing);
+  }
   viewing = key;
+  if (key) {
+    look(key);
+  }
   if (key && document.hasFocus()) {
     unread.delete(key);
   }
@@ -214,8 +260,24 @@ export const view = (key: string | null) => {
 };
 
 window.addEventListener("focus", () => {
+  if (viewing) {
+    look(viewing);
+  }
   if (viewing && unread.delete(viewing)) {
     emit();
+  }
+});
+
+window.addEventListener("blur", () => {
+  if (viewing) {
+    look(viewing);
+    emit();
+  }
+});
+
+window.addEventListener("beforeunload", () => {
+  if (viewing) {
+    look(viewing);
   }
 });
 
