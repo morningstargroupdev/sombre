@@ -57,6 +57,7 @@ const move = (panel: HTMLElement, step: number) => {
 
 interface Props {
   label: string;
+  title?: string;
   trigger: ReactNode;
   className?: string;
   side?: "top" | "bottom";
@@ -70,6 +71,7 @@ interface Props {
 
 export const Popover = ({
   label,
+  title,
   trigger,
   className = chip,
   side = "top",
@@ -202,6 +204,7 @@ export const Popover = ({
         disabled={disabled}
         onClick={() => set(!open)}
         ref={button}
+        title={title}
         type="button"
       >
         {trigger}

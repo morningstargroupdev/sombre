@@ -10,7 +10,7 @@ import {
   repo as read,
   request,
 } from "../lib/api";
-import { counted, suggest } from "../lib/git";
+import { counted, suggest, summary } from "../lib/git";
 import { split } from "../lib/patch";
 import { toast } from "../lib/toasts";
 import { Field, primary, secondary } from "./field";
@@ -162,6 +162,7 @@ export const Git = ({ folder, version, compact }: Props) => {
     });
 
   const label = doing ?? state.branch ?? "detached";
+  const about = summary(state.branch ?? "detached", state.changed, state.ahead);
 
   return (
     <>
@@ -169,8 +170,9 @@ export const Git = ({ folder, version, compact }: Props) => {
         align="end"
         className="text-fog hover:bg-raise hover:text-paper active:bg-well aria-expanded:bg-raise aria-expanded:text-paper flex h-7 min-w-0 cursor-pointer items-center gap-1.5 rounded-lg px-2"
         disabled={doing !== null}
-        label="git"
+        label={`git: ${about}`}
         side="bottom"
+        title={about}
         trigger={
           <>
             <Icon />
@@ -178,10 +180,13 @@ export const Git = ({ folder, version, compact }: Props) => {
               <span className="max-w-36 truncate">{label}</span>
             )}
             {state.ahead > 0 ? (
-              <span className="text-paper">{`↑${state.ahead}`}</span>
+              <span className="text-body tabular-nums">{`↑${state.ahead}`}</span>
             ) : null}
             {state.changed > 0 ? (
-              <span className="text-ember">{`●${state.changed}`}</span>
+              <span
+                aria-hidden="true"
+                className="bg-ember size-1.5 shrink-0 rounded-full"
+              />
             ) : null}
           </>
         }

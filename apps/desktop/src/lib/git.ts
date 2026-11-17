@@ -18,3 +18,14 @@ export const suggest = (files: string[]) => {
 
 export const counted = (count: number, one: string, many: string) =>
   count === 1 ? `1 ${one}` : `${count} ${many}`;
+
+export const summary = (branch: string, changed: number, ahead: number) =>
+  [
+    branch,
+    changed > 0
+      ? counted(changed, "changed file", "changed files")
+      : "nothing to commit",
+    ahead > 0 ? `${counted(ahead, "commit", "commits")} to push` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
