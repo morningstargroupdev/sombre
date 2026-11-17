@@ -614,7 +614,9 @@ pub fn notify(message: &str) {
 }
 
 pub fn wrap(text: &str, room: usize) -> Vec<String> {
-    textwrap::wrap(text, room.max(10))
+    let options =
+        textwrap::Options::new(room.max(10)).word_separator(textwrap::WordSeparator::AsciiSpace);
+    textwrap::wrap(text, options)
         .into_iter()
         .map(|line| line.into_owned())
         .collect()
@@ -1275,6 +1277,18 @@ pub fn help() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wraps_at_spaces_so_commands_stay_whole() {
+        assert_eq!(
+            wrap("it works once. /pair list shows paired phones", 20),
+            ["it works once. /pair", "list shows paired", "phones"]
+        );
+        assert_eq!(
+            wrap("run it with /pair forget <number> later", 16),
+            ["run it with", "/pair forget", "<number> later"]
+        );
+    }
 
     #[test]
     fn chops_styled_lines_into_rows_that_fit() {
