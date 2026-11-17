@@ -1,5 +1,8 @@
 import type { Chat } from "./api";
 import { matches } from "./feed";
+import type { Shelf } from "./inbox";
+import { numbers, shelf } from "./inbox";
+import type { Flag } from "./live";
 
 export interface Prefs {
   pinned: string[];
@@ -8,6 +11,11 @@ export interface Prefs {
   opened: string[];
   hidden: boolean;
   width: number;
+  settled: Record<string, number>;
+  snoozed: Record<string, number>;
+  shelves: string[];
+  only: string[];
+  grouped: boolean;
 }
 
 export interface Project {
@@ -24,6 +32,15 @@ export interface Sections {
   total: number;
 }
 
+export type Shelves = Record<Shelf | "pinned", Chat[]> & { total: number };
+
+export interface Place {
+  folder: string;
+  name: string;
+  place: string;
+  count: number;
+}
+
 export const LIMIT = 5;
 
 export const WIDTH = 272;
@@ -34,9 +51,14 @@ export const widen = (value: number) =>
 export const blank: Prefs = {
   archived: [],
   folded: [],
+  grouped: false,
   hidden: false,
+  only: [],
   opened: [],
   pinned: [],
+  settled: {},
+  shelves: [],
+  snoozed: {},
   width: WIDTH,
 };
 
@@ -55,9 +77,14 @@ export const parse = (raw: string | null): Prefs => {
     return {
       archived: strings(field("archived")),
       folded: strings(field("folded")),
+      grouped: field("grouped") === true,
       hidden: field("hidden") === true,
+      only: strings(field("only")),
       opened: strings(field("opened")),
       pinned: strings(field("pinned")),
+      settled: numbers(field("settled")),
+      shelves: strings(field("shelves")),
+      snoozed: numbers(field("snoozed")),
       width:
         typeof field("width") === "number"
           ? widen(Number(field("width")))
@@ -77,15 +104,67 @@ export const keyed = (chat: Chat) => `${chat.agent}:${chat.id}`;
 
 export const short = (ago: string) => ago.replace(/ ago$/u, "");
 
+const visible = (chats: Chat[], prefs: Prefs, query: string) =>
+  chats.filter(
+    (chat) =>
+      !prefs.archived.includes(keyed(chat)) &&
+      matches(chat, query) &&
+      (prefs.only.length === 0 || prefs.only.includes(chat.folder))
+  );
+
+export const shelves = (
+  chats: Chat[],
+  prefs: Prefs,
+  query: string,
+  flag: (chat: Chat) => Flag | null,
+  now: number
+): Shelves => {
+  const kept = visible(chats, prefs, query);
+  const found: Shelves = {
+    inbox: [],
+    pinned: [],
+    settled: [],
+    snoozed: [],
+    total: kept.length,
+  };
+  for (const chat of kept) {
+    const key = keyed(chat);
+    const place = prefs.pinned.includes(key)
+      ? "pinned"
+      : shelf(chat, key, prefs, flag(chat), now);
+    found[place].push(chat);
+  }
+  found.snoozed.sort(
+    (one, two) =>
+      (prefs.snoozed[keyed(one)] ?? 0) - (prefs.snoozed[keyed(two)] ?? 0)
+  );
+  return found;
+};
+
+export const places = (chats: Chat[], prefs: Prefs): Place[] => {
+  const found = new Map<string, Place>();
+  for (const chat of chats) {
+    if (prefs.archived.includes(keyed(chat))) {
+      continue;
+    }
+    const known = found.get(chat.folder);
+    found.set(chat.folder, {
+      count: (known?.count ?? 0) + 1,
+      folder: chat.folder,
+      name: known?.name ?? chat.project,
+      place: known?.place ?? chat.place,
+    });
+  }
+  return [...found.values()];
+};
+
 export const sections = (
   chats: Chat[],
   prefs: Prefs,
   query: string,
   current: string | null
 ): Sections => {
-  const kept = chats.filter(
-    (chat) => !prefs.archived.includes(keyed(chat)) && matches(chat, query)
-  );
+  const kept = visible(chats, prefs, query);
   const pinned = kept.filter((chat) => prefs.pinned.includes(keyed(chat)));
   const rest = kept.filter((chat) => !prefs.pinned.includes(keyed(chat)));
   const folders = new Map<string, Chat[]>();

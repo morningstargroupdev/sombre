@@ -6,7 +6,9 @@ import {
   blank,
   keyed,
   parse,
+  places,
   sections,
+  shelves,
   short,
   toggle,
   widen,
@@ -85,6 +87,61 @@ describe("sections", () => {
   });
 });
 
+const now = 2_000_000_000;
+
+const at = (id: string, folder: string, updated: number) => ({
+  ...chat(id, folder),
+  updated,
+});
+
+describe("inbox", () => {
+  test("sorts chats onto shelves and keeps pins on top", () => {
+    const list = [
+      at("a1", "/Users/sam/app", now - 60),
+      at("a2", "/Users/sam/app", now - 60),
+      at("a3", "/Users/sam/app", now - 30 * 86_400),
+      at("b1", "/Users/sam/site", now - 120),
+    ];
+    const prefs = {
+      ...blank,
+      pinned: ["claude:a2"],
+      snoozed: { "claude:b1": now + 600 },
+    };
+    const found = shelves(list, prefs, "", () => null, now);
+    expect(found.pinned.map((item) => item.id)).toEqual(["a2"]);
+    expect(found.inbox.map((item) => item.id)).toEqual(["a1"]);
+    expect(found.snoozed.map((item) => item.id)).toEqual(["b1"]);
+    expect(found.settled.map((item) => item.id)).toEqual(["a3"]);
+    expect(found.total).toBe(4);
+  });
+
+  test("the project filter narrows every view", () => {
+    const list = [
+      at("a1", "/Users/sam/app", now),
+      at("b1", "/Users/sam/site", now),
+    ];
+    const only = { ...blank, only: ["/Users/sam/site"] };
+    expect(
+      shelves(list, only, "", () => null, now).inbox.map((item) => item.id)
+    ).toEqual(["b1"]);
+    expect(
+      sections(list, only, "", null).projects.map((item) => item.folder)
+    ).toEqual(["/Users/sam/site"]);
+  });
+
+  test("lists each project once with its chat count", () => {
+    const list = [
+      at("a1", "/Users/sam/app", now),
+      at("a2", "/Users/sam/app", now),
+      at("b1", "/Users/sam/site", now),
+    ];
+    expect(places(list, { ...blank, archived: ["claude:a2"] })).toEqual([
+      { count: 1, folder: "/Users/sam/app", name: "app", place: "~/app" },
+      { count: 1, folder: "/Users/sam/site", name: "site", place: "~/site" },
+    ]);
+  });
+});
+
 describe("prefs", () => {
   test("reads saved prefs and survives junk", () => {
     expect(parse(null)).toEqual(blank);
@@ -94,6 +151,23 @@ describe("prefs", () => {
       hidden: true,
       pinned: ["claude:a"],
     });
+  });
+
+  test("reads the inbox marks and drops anything that isn't a time", () => {
+    const saved = parse(
+      JSON.stringify({
+        grouped: true,
+        only: ["/w/app", 4],
+        settled: { "claude:a": 100, "claude:b": "soon" },
+        shelves: ["settled"],
+        snoozed: { "codex:c": 200 },
+      })
+    );
+    expect(saved.settled).toEqual({ "claude:a": 100 });
+    expect(saved.snoozed).toEqual({ "codex:c": 200 });
+    expect(saved.only).toEqual(["/w/app"]);
+    expect(saved.shelves).toEqual(["settled"]);
+    expect(saved.grouped).toBe(true);
   });
 
   test("toggles entries in a list", () => {
