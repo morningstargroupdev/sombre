@@ -2,7 +2,6 @@ use std::io;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Duration;
 
 use serde_json::{Value, json};
 
@@ -218,6 +217,7 @@ fn local(
 ) -> io::Result<(String, String)> {
     use std::io::{Read, Write};
     use std::os::unix::net::UnixStream;
+    use std::time::Duration;
 
     let mut stream = UnixStream::connect(socket)?;
     stream.set_read_timeout(Some(Duration::from_secs(3)))?;
