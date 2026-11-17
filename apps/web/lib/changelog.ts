@@ -6,6 +6,17 @@ export interface Release {
 
 export const releases: Release[] = [
   {
+    date: "2026-11-17",
+    items: [
+      "The session follows you down the page, from your Mac to your phone",
+      "Approve a command from the floating session as you scroll",
+      "Smooth transitions between pages, plus a page for links that go nowhere",
+      "Clearer link previews and search listings",
+      "Fixes for phones and keyboard navigation",
+    ],
+    title: "A new landing page",
+  },
+  {
     date: "2026-11-10",
     items: [
       "sombre.ai and sombre.si now point to the site",
