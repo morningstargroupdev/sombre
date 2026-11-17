@@ -12,7 +12,7 @@ const sizes = {
 export const Access = ({ size = "large" }: Props) => (
   <a
     aria-label="Get early access"
-    className={`pill bg-ink text-sheet inline-flex items-center justify-center rounded-full font-medium ${sizes[size]}`}
+    className={`pill bg-ink text-sheet inline-flex shrink-0 items-center justify-center rounded-full font-medium whitespace-nowrap ${sizes[size]}`}
     href={access}
   >
     <span className="roll">
