@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -15,7 +16,10 @@ pub enum Out {
     Exit { code: Option<u32> },
 }
 
+static OPENED: AtomicU64 = AtomicU64::new(0);
+
 struct Session {
+    id: u64,
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     child: Box<dyn Child + Send + Sync>,
@@ -35,6 +39,14 @@ fn shell() -> CommandBuilder {
 #[cfg(windows)]
 fn shell() -> CommandBuilder {
     CommandBuilder::new("powershell.exe")
+}
+
+fn release<T>(held: &mut HashMap<String, T>, name: &str, mine: impl Fn(&T) -> bool) -> Option<T> {
+    if held.get(name).is_some_and(mine) {
+        held.remove(name)
+    } else {
+        None
+    }
 }
 
 pub fn decode(carry: &mut Vec<u8>) -> String {
@@ -103,9 +115,11 @@ impl Terms {
             .master
             .take_writer()
             .map_err(|error| format!("couldn't write to the terminal: {error}"))?;
+        let id = OPENED.fetch_add(1, Ordering::Relaxed);
         held.insert(
             key.to_string(),
             Session {
+                id,
                 child,
                 master: pair.master,
                 writer,
@@ -132,7 +146,7 @@ impl Terms {
             let code = sessions
                 .lock()
                 .ok()
-                .and_then(|mut held| held.remove(&name))
+                .and_then(|mut held| release(&mut held, &name, |session| session.id == id))
                 .and_then(|mut session| session.child.wait().ok())
                 .map(|status| status.exit_code());
             let _ = out.send(Out::Exit { code });
@@ -189,6 +203,15 @@ impl Terms {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_old_shell_only_releases_its_own_session() {
+        let mut held = HashMap::from([("chat".to_string(), 2_u64)]);
+        assert_eq!(release(&mut held, "chat", |id| *id == 1), None);
+        assert_eq!(held.len(), 1);
+        assert_eq!(release(&mut held, "chat", |id| *id == 2), Some(2));
+        assert!(held.is_empty());
+    }
 
     #[test]
     fn keeps_a_split_character_for_the_next_chunk() {
