@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "sombre-relay",
+  "name": "relay",
   "main": "src/index.ts",
   "compatibility_date": "2026-11-01",
   "assets": {
