@@ -466,8 +466,12 @@ const tone = (row) => {
   return "";
 };
 
-const summary = (message) =>
-  message.cost > 0 ? `$${message.cost.toFixed(2)}` : "";
+export const summary = (message) => {
+  if (!(message.cost > 0)) {
+    return "";
+  }
+  return message.cost < 0.01 ? "<$0.01" : `$${message.cost.toFixed(2)}`;
+};
 
 const ring = (left) => {
   const used = Math.min(100, Math.max(0, 100 - left));

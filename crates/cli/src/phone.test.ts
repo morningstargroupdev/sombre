@@ -9,6 +9,7 @@ import {
   queued,
   seal,
   stripped,
+  summary,
   tallied,
   ticket,
 } from "./phone.js";
@@ -106,5 +107,15 @@ describe("steps on the phone", () => {
       ])
     ).toBe("Read ×3  Run  Edit");
     expect(tallied([{ label: "Run" }])).toBe("Run");
+  });
+});
+
+describe("summary", () => {
+  test("shows costs the way the mac does", () => {
+    expect(summary({ cost: 0.004 })).toBe("<$0.01");
+    expect(summary({ cost: 0.0123 })).toBe("$0.01");
+    expect(summary({ cost: 1.5 })).toBe("$1.50");
+    expect(summary({ cost: 0 })).toBe("");
+    expect(summary({})).toBe("");
   });
 });
