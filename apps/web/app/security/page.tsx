@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 
 import { Shell } from "@/components/shell";
+import { page } from "@/lib/meta";
 import { site } from "@/lib/site";
 
-export const metadata: Metadata = {
-  description:
-    "How Sombre keeps your code on your Mac while you continue sessions from your phone.",
-  title: "Security",
-};
+export const metadata: Metadata = page(
+  "/security",
+  "How Sombre keeps your code on your Mac",
+  "How Sombre keeps your code on your Mac while you continue sessions from your phone."
+);
 
 const principles = [
   {

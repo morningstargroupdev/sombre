@@ -19,17 +19,10 @@ const plex = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/" },
   authors: [{ name: site.name }],
   creator: site.name,
   description: site.description,
-  keywords: [
-    "coding agent",
-    "claude code",
-    "codex",
-    "remote",
-    "mobile",
-    "desktop app",
-  ],
   metadataBase: new URL(site.url),
   openGraph: {
     description: site.description,

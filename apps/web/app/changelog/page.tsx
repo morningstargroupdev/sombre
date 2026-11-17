@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 
 import { Shell } from "@/components/shell";
 import { format, releases } from "@/lib/changelog";
+import { page } from "@/lib/meta";
 
-export const metadata: Metadata = {
-  description: "What's new in Sombre, newest first.",
-  title: "Changelog",
-};
+export const metadata: Metadata = page(
+  "/changelog",
+  "Changelog",
+  "What's new in Sombre, newest first."
+);
 
 const Changelog = () => (
   <Shell

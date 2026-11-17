@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 
 import { Access } from "@/components/access";
 import { Shell } from "@/components/shell";
+import { page } from "@/lib/meta";
 
-export const metadata: Metadata = {
-  description:
-    "Guides for installing Sombre, pairing your phone, and running Claude Code and Codex sessions.",
-  title: "Docs",
-};
+export const metadata: Metadata = page(
+  "/docs",
+  "Install and use Sombre",
+  "Guides for installing Sombre, pairing your phone, and running Claude Code and Codex sessions."
+);
 
 const topics = [
   {
