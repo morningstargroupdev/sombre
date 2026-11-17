@@ -1,0 +1,20 @@
+# Sombre
+
+> Sombre runs Claude Code and Codex on your Mac. Open the same session on your phone and keep working while you're away from your desk. Early access.
+
+Sombre is one place for every coding agent session on your Mac. It finds your existing Claude Code and Codex chats, lets you continue any of them, and moves a chat between agents without losing its history. Your code stays on your Mac.
+
+## Pages
+
+- [Home](https://sombre.ai/): what Sombre does and how it works
+- [Docs](https://sombre.ai/docs): install Sombre, pair your phone, start a session, approve changes, choose an agent, troubleshooting
+- [Security](https://sombre.ai/security): how Sombre keeps your code on your Mac while you continue sessions from your phone
+- [Changelog](https://sombre.ai/changelog): what's new, newest first
+
+## Facts
+
+- Works with Claude Code and Codex through their own command-line tools and your own logins
+- Sombre's own agent works with any OpenAI-compatible endpoint, including Vercel AI Gateway and local models through Ollama
+- Runs on macOS first, with Linux and Windows support in progress
+- Source: https://github.com/visible/sombre
+- Contact: hello@sombre.ai
