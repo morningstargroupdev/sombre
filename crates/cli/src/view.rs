@@ -292,7 +292,7 @@ Entry::Typed(false, text) if text.starts_with('/') => None,
     shown.into_iter().skip(skip).collect()
 }
 
-pub fn pairing(url: &str, remote: bool) {
+pub fn pairing(url: &str, reach: crate::relay::Reach) {
     gap();
     let code = qrcode::QrCode::new(url.as_bytes()).map(|code| {
         code.render::<qrcode::render::unicode::Dense1x2>()
@@ -310,10 +310,16 @@ pub fn pairing(url: &str, remote: bool) {
     line(&format!("  {}", bold("scan this with your phone's camera")));
     line(&format!(
         "  {}",
-        dim(if remote {
-            "it opens this chat in your phone's browser, from anywhere, through your relay"
-        } else {
-            "it opens this chat in your phone's browser. you both need the same wi-fi"
+        dim(match reach {
+            crate::relay::Reach::Relay => {
+                "it opens this chat in your phone's browser, from anywhere, through your relay"
+            }
+            crate::relay::Reach::Tailnet => {
+                "it opens this chat in your phone's browser, from anywhere, while tailscale is on on both"
+            }
+            crate::relay::Reach::Wifi => {
+                "it opens this chat in your phone's browser. you both need the same wi-fi"
+            }
         })
     ));
     line(&format!(

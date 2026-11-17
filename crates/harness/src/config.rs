@@ -73,6 +73,8 @@ pub struct Config {
     pub silent: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relay: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub tailscale: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -421,6 +423,20 @@ mod tests {
         assert_eq!(level("minimal", &claude), Some("low"));
         assert_eq!(level("high", &claude), Some("high"));
         assert_eq!(level("loud", &claude), None);
+    }
+
+    #[test]
+    fn reads_the_phone_settings_written_by_hand() {
+        let config: Config =
+            toml::from_str("tailscale = true\nrelay = \"http://100.101.102.103:8787/\"\n")
+                .unwrap_or_else(|error| panic!("{error}"));
+        assert!(config.tailscale);
+        assert_eq!(
+            config.relay.as_deref(),
+            Some("http://100.101.102.103:8787/")
+        );
+        let plain = toml::to_string(&Config::default()).unwrap_or_else(|error| panic!("{error}"));
+        assert!(!plain.contains("tailscale"));
     }
 
     #[test]

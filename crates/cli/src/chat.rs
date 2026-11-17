@@ -14,6 +14,7 @@ use crate::approve::{self, Choice};
 use crate::carry;
 use crate::dock::{Action, Dock, Draft};
 use crate::provider;
+use crate::relay::Reach;
 use crate::size;
 use crate::streak::Streak;
 use crate::view;
@@ -810,7 +811,7 @@ enum Setting {
     Effort,
     Working,
     Screen,
-    Relay,
+    Phone,
     Publish,
     Mcp,
 }
@@ -884,13 +885,14 @@ fn settings(engine: &Engine, roots: &Roots) -> Option<Input> {
                 },
             ),
             (
-                Setting::Relay,
-                "phone relay",
-                config
-                    .relay
-                    .clone()
-                    .unwrap_or_else(|| "this wi-fi".to_string()),
-                "where /pair sends phones. this wi-fi needs no setup. a relay url works from anywhere",
+                Setting::Phone,
+                "phone",
+                match reached(&config) {
+                    Reach::Wifi => "this wi-fi".to_string(),
+                    Reach::Tailnet => "tailscale".to_string(),
+                    Reach::Relay => config.relay.clone().unwrap_or_default(),
+                },
+                "how /pair reaches your phone. this wi-fi needs no setup, tailscale and a relay work from anywhere",
             ),
             (
                 Setting::Publish,
@@ -929,34 +931,22 @@ fn settings(engine: &Engine, roots: &Roots) -> Option<Input> {
             Setting::Permissions => Input::Permissions(None),
             Setting::Effort => Input::Effort(None),
             Setting::Mcp => Input::Mcp,
-            Setting::Relay => {
-                let Ok(typed) = crate::menu::input("relay url")
-                    .placeholder("leave empty for this wi-fi, or https://relay.example.com")
-                    .default_input(config.relay.as_deref().unwrap_or_default())
-                    .allow_empty()
-                    .validate(|url: &String| {
-                        if url.is_empty()
-                            || url.starts_with("https://")
-                            || url.starts_with("http://")
-                        {
-                            Ok(())
-                        } else {
-                            Err("start with https:// or http://, or leave it empty")
-                        }
-                    })
-                    .interact()
-                else {
+            Setting::Phone => {
+                if !phone(&mut config) {
                     continue;
-                };
-                config.relay =
-                    Some(typed.trim_end_matches('/').to_string()).filter(|url| !url.is_empty());
+                }
                 if let Err(error) = config.save(&roots.sombre) {
                     view::failed(&format!("couldn't save the setting: {error}"));
                     return None;
                 }
+                if config.tailscale && crate::relay::tailnet().is_none() {
+                    view::note(
+                        "tailscale isn't connected on this mac right now. /pair works once it is",
+                    );
+                }
                 if crate::relay::paired() {
                     view::note(
-                        "the new relay is used the next time you run /pair. /pair off stops the current one",
+                        "this is used the next time you run /pair. /pair off stops the current one",
                     );
                 }
                 continue;
@@ -988,6 +978,66 @@ fn settings(engine: &Engine, roots: &Roots) -> Option<Input> {
             }
         });
     }
+}
+
+fn reached(config: &Config) -> Reach {
+    if config.tailscale {
+        Reach::Tailnet
+    } else if config.relay.is_some() {
+        Reach::Relay
+    } else {
+        Reach::Wifi
+    }
+}
+
+fn phone(config: &mut Config) -> bool {
+    let Ok(picked) = crate::menu::select("how should /pair reach your phone?")
+        .item(
+            Reach::Wifi,
+            "this wi-fi",
+            "no setup. your phone needs the same wi-fi",
+        )
+        .item(
+            Reach::Tailnet,
+            "tailscale",
+            "from anywhere. your phone needs tailscale on the same tailnet",
+        )
+        .item(
+            Reach::Relay,
+            "a relay",
+            "from anywhere, through a sombre relay you run",
+        )
+        .initial_value(reached(config))
+        .interact()
+    else {
+        return false;
+    };
+    match picked {
+        Reach::Wifi => {
+            config.tailscale = false;
+            config.relay = None;
+        }
+        Reach::Tailnet => config.tailscale = true,
+        Reach::Relay => {
+            let Ok(typed) = crate::menu::input("relay url")
+                .placeholder("https://relay.example.com")
+                .default_input(config.relay.as_deref().unwrap_or_default())
+                .validate(|url: &String| {
+                    if url.starts_with("https://") || url.starts_with("http://") {
+                        Ok(())
+                    } else {
+                        Err("start with https:// or http://")
+                    }
+                })
+                .interact()
+            else {
+                return false;
+            };
+            config.tailscale = false;
+            config.relay = Some(typed.trim_end_matches('/').to_string());
+        }
+    }
+    true
 }
 
 fn skills(engine: &Engine) {
@@ -1892,18 +1942,18 @@ fn pair(engine: &Engine, roots: Option<&Roots>, command: &str) {
             }
         }
         [] => {
-            let relay = roots
+            let config = roots
                 .and_then(|roots| Config::load(&roots.sombre).ok())
-                .and_then(|config| config.relay);
+                .unwrap_or_default();
             let fresh = !crate::relay::paired();
-            match crate::relay::invite(relay.as_deref()) {
-                Ok(url) => {
+            match crate::relay::invite(reached(&config), config.relay.as_deref()) {
+                Ok((url, reach)) => {
                     if fresh {
                         for item in shared(engine) {
                             crate::relay::post(&item);
                         }
                     }
-                    view::pairing(&url, relay.is_some());
+                    view::pairing(&url, reach);
                 }
                 Err(problem) => view::failed(&problem),
             }
