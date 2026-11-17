@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::{IpAddr, Ipv4Addr, TcpListener, TcpStream, UdpSocket};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
@@ -12,6 +12,8 @@ use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use ring::aead::{Aad, CHACHA20_POLY1305, LessSafeKey, Nonce, UnboundKey};
 use ring::rand::{SecureRandom, SystemRandom};
 use serde_json::{Value, json};
+
+use crate::tailscale::Node;
 
 const PAGE: &str = include_str!("phone.html");
 const SCRIPT: &str = include_str!("phone.js");
@@ -507,7 +509,9 @@ enum Link {
         room: String,
         secret: String,
         address: (IpAddr, u16),
+        bind: IpAddr,
         reach: Reach,
+        forwarded: Option<PathBuf>,
     },
     There {
         base: String,
@@ -608,7 +612,7 @@ impl Session {
     }
 }
 
-fn route(to: Ipv4Addr) -> Option<IpAddr> {
+pub fn route(to: Ipv4Addr) -> Option<IpAddr> {
     let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).ok()?;
     socket.connect((to, 9)).ok()?;
     Some(socket.local_addr().ok()?.ip())
@@ -618,18 +622,8 @@ fn address() -> IpAddr {
     route(Ipv4Addr::new(192, 0, 2, 1)).unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST))
 }
 
-fn tailscale(ip: IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(ip) => {
-            let [first, second, ..] = ip.octets();
-            first == 100 && (64..128).contains(&second) && ip != Ipv4Addr::new(100, 100, 100, 100)
-        }
-        IpAddr::V6(_) => false,
-    }
-}
-
-pub fn tailnet() -> Option<IpAddr> {
-    route(Ipv4Addr::new(100, 100, 100, 100)).filter(|ip| tailscale(*ip))
+pub fn tailnet() -> Option<Node> {
+    crate::tailscale::find()
 }
 
 const OFFLINE: &str = "tailscale isn't connected on this mac. turn it on and run /pair again, or pick this wi-fi under phone in /settings";
@@ -782,15 +776,48 @@ fn start(link: Link, key: [u8; 32]) -> Arc<Session> {
 }
 
 fn here(reach: Reach) -> Result<Link, String> {
-    let ip = match reach {
-        Reach::Tailnet => tailnet().ok_or(OFFLINE)?,
-        Reach::Wifi | Reach::Relay => address(),
+    let link = match reach {
+        Reach::Tailnet => {
+            let node = tailnet().ok_or(OFFLINE)?;
+            let mut tries = 0;
+            loop {
+                tries += 1;
+                match here_at(node.ip(), node.bind(), reach).and_then(|link| expose(link, &node)) {
+                    Err(error) if error.kind() == io::ErrorKind::AddrInUse && tries < 8 => {}
+                    link => break link,
+                }
+            }
+        }
+        Reach::Wifi | Reach::Relay => {
+            let ip = address();
+            here_at(ip, ip, reach)
+        }
     };
-    here_at(ip, reach).map_err(|error| format!("couldn't start pairing: {error}"))
+    link.map_err(|error| format!("couldn't start pairing: {error}"))
 }
 
-fn here_at(ip: IpAddr, reach: Reach) -> io::Result<Link> {
-    let listener = TcpListener::bind((ip, 0))?;
+fn expose(mut link: Link, node: &Node) -> io::Result<Link> {
+    let (
+        Node::Userspace { socket, .. },
+        Link::Here {
+            address: (_, port), ..
+        },
+    ) = (node, &link)
+    else {
+        return Ok(link);
+    };
+    if let Err(error) = crate::tailscale::forward(socket, *port) {
+        halt(&link);
+        return Err(error);
+    }
+    if let Link::Here { forwarded, .. } = &mut link {
+        *forwarded = Some(socket.clone());
+    }
+    Ok(link)
+}
+
+fn here_at(ip: IpAddr, bind: IpAddr, reach: Reach) -> io::Result<Link> {
+    let listener = TcpListener::bind((bind, 0))?;
     let port = listener.local_addr()?.port();
     let hub = Arc::new(Hub::new(false, None));
     let (room, secret) = hub
@@ -800,6 +827,8 @@ fn here_at(ip: IpAddr, reach: Reach) -> io::Result<Link> {
     thread::spawn(move || serving.listen(&listener));
     Ok(Link::Here {
         address: (ip, port),
+        bind,
+        forwarded: None,
         hub,
         reach,
         room,
@@ -864,12 +893,29 @@ pub fn close() -> bool {
         let _ = std::fs::remove_file(path);
     }
     let _ = session.link.call("POST", "close", "", "");
-    if let Link::Here { hub, address, .. } = &session.link {
+    halt(&session.link);
+    true
+}
+
+fn halt(link: &Link) {
+    if let Link::Here {
+        hub,
+        address: (_, port),
+        bind,
+        forwarded,
+        ..
+    } = link
+    {
         hub.stop.store(true, Ordering::SeqCst);
         hub.changed.notify_all();
-        let _ = TcpStream::connect(*address);
+        let _ = TcpStream::connect_timeout(
+            &std::net::SocketAddr::new(*bind, *port),
+            Duration::from_secs(1),
+        );
+        if let Some(socket) = forwarded {
+            let _ = crate::tailscale::unforward(socket, *port);
+        }
     }
-    true
 }
 
 fn devices_from(saved: &Value) -> Vec<Device> {
@@ -888,6 +934,32 @@ fn devices_from(saved: &Value) -> Vec<Device> {
 }
 
 pub fn resume() -> Result<bool, String> {
+    let resumed = reopen();
+    let saved = place()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok());
+    if let Some(port) = saved
+        .filter(|saved| saved["via"] == "tailnet")
+        .and_then(|saved| saved["port"].as_u64())
+        .and_then(|port| u16::try_from(port).ok())
+        && !forwarding(port)
+        && TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_ok()
+    {
+        crate::tailscale::release(port);
+    }
+    resumed
+}
+
+fn forwarding(port: u16) -> bool {
+    live().is_some_and(|session| {
+        matches!(
+            &session.link,
+            Link::Here { forwarded: Some(_), address: (_, here), .. } if *here == port
+        )
+    })
+}
+
+fn reopen() -> Result<bool, String> {
     if live().is_some() {
         return Ok(false);
     }
@@ -923,12 +995,14 @@ pub fn resume() -> Result<bool, String> {
         } else {
             Reach::Wifi
         };
-        let ip = match reach {
-            Reach::Tailnet => tailnet().ok_or(
+        let node = match reach {
+            Reach::Tailnet => Some(tailnet().ok_or(
                 "tailscale isn't connected, so your phone can't reach this mac. turn it on, or run /pair for a new link",
-            )?,
-            Reach::Wifi | Reach::Relay => address(),
+            )?),
+            Reach::Wifi | Reach::Relay => None,
         };
+        let ip = node.as_ref().map_or_else(address, Node::ip);
+        let bind = node.as_ref().map_or(ip, Node::bind);
         if saved["ip"].as_str() != Some(ip.to_string().as_str()) {
             return Err(match reach {
                 Reach::Tailnet => "your mac's tailscale address changed, so your phone needs a new link. run /pair",
@@ -940,19 +1014,27 @@ pub fn resume() -> Result<bool, String> {
             .as_u64()
             .and_then(|port| u16::try_from(port).ok())
             .unwrap_or_default();
-        let Ok(listener) = TcpListener::bind((ip, port)) else {
+        let Ok(listener) = TcpListener::bind((bind, port)) else {
             return Ok(false);
         };
         let hub = Arc::new(Hub::new(false, None));
         hub.restore(room, secret, devices_from(&saved));
         let serving = Arc::clone(&hub);
         thread::spawn(move || serving.listen(&listener));
-        Link::Here {
+        let link = Link::Here {
             address: (ip, port),
+            bind,
+            forwarded: None,
             hub,
             reach,
             room: room.to_string(),
             secret: secret.to_string(),
+        };
+        match &node {
+            Some(node) => expose(link, node).map_err(|error| {
+                format!("couldn't let your phone in through tailscale: {error}")
+            })?,
+            None => link,
         }
     };
     start(link, key);
@@ -1128,19 +1210,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn knows_a_tailscale_address_when_it_sees_one() {
-        let on = |a, b, c, d| tailscale(IpAddr::V4(Ipv4Addr::new(a, b, c, d)));
-        assert!(on(100, 101, 102, 103));
-        assert!(on(100, 64, 0, 1));
-        assert!(on(100, 127, 255, 254));
-        assert!(!on(100, 63, 0, 1));
-        assert!(!on(100, 128, 0, 1));
-        assert!(!on(100, 100, 100, 100));
-        assert!(!on(192, 168, 1, 217));
-        assert!(!tailscale(IpAddr::V6(std::net::Ipv6Addr::LOCALHOST)));
-    }
-
     fn session(link: Link) -> Session {
         Session {
             answers: Mutex::new(VecDeque::new()),
@@ -1155,13 +1224,14 @@ mod tests {
     #[test]
     fn a_tailnet_pairing_remembers_how_it_was_made() {
         let local = IpAddr::V4(Ipv4Addr::LOCALHOST);
-        let tailnet = here_at(local, Reach::Tailnet).unwrap_or_else(|error| panic!("{error}"));
+        let tailnet =
+            here_at(local, local, Reach::Tailnet).unwrap_or_else(|error| panic!("{error}"));
         assert_eq!(tailnet.reach(), Reach::Tailnet);
         assert!(tailnet.page().starts_with("http://127.0.0.1:"));
         let saved = snapshot(&session(tailnet));
         assert_eq!(saved["via"], "tailnet");
         assert_eq!(saved["ip"], "127.0.0.1");
-        let wifi = here_at(local, Reach::Wifi).unwrap_or_else(|error| panic!("{error}"));
+        let wifi = here_at(local, local, Reach::Wifi).unwrap_or_else(|error| panic!("{error}"));
         assert_eq!(wifi.reach(), Reach::Wifi);
         assert!(snapshot(&session(wifi)).get("via").is_none());
     }

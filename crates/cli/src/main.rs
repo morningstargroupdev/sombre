@@ -15,6 +15,7 @@ mod provider;
 mod relay;
 mod size;
 mod streak;
+mod tailscale;
 mod view;
 
 use std::env;
