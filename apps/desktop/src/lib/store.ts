@@ -1,0 +1,421 @@
+import { UserAttentionType, getCurrentWindow } from "@tauri-apps/api/window";
+import { useSyncExternalStore } from "react";
+
+import type {
+  Agent,
+  Choice,
+  Entry,
+  Mode,
+  Opening,
+  Picture,
+  Update,
+} from "./api";
+import {
+  answer,
+  carry,
+  compact,
+  failure,
+  goal,
+  record,
+  names,
+  rename,
+  send,
+  start,
+  steer,
+  stop,
+  tune,
+} from "./api";
+import type { Live } from "./live";
+import {
+  answered,
+  apply,
+  initial,
+  mark,
+  marked,
+  restored,
+  said,
+  waiting,
+} from "./live";
+
+const EMPTY = initial();
+const lives = new Map<string, Live>();
+const drafts = new Map<string, string>();
+const aliases = new Map<string, string>();
+const opened = new Set<string>();
+const stories = new Map<string, Entry[]>();
+const unread = new Set<string>();
+let viewing: string | null = null;
+let shown = "";
+
+export type Event = "done" | "ask" | "failed";
+
+let alerting: (key: string, event: Event) => void = () => null;
+const listeners = new Set<() => void>();
+let busy = "";
+let changed: () => void = () => null;
+
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
+const emit = () => {
+  busy = [...lives]
+    .filter(([, live]) => live.busy)
+    .map(([key]) => key)
+    .join("\n");
+  shown = [...lives]
+    .map(([key, live]) => {
+      const found = mark(live, unread.has(key));
+      return found ? `${key}=${found}` : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+  for (const listener of listeners) {
+    listener();
+  }
+};
+
+const read = (key: string) => lives.get(key) ?? EMPTY;
+
+const write = (key: string, change: (live: Live) => Live) => {
+  lives.set(key, change(read(key)));
+  emit();
+};
+
+const fail = (key: string, error: unknown) =>
+  write(key, (live) =>
+    apply(
+      { ...live, busy: false, since: null },
+      { kind: "failed", text: failure(error) },
+      Date.now()
+    )
+  );
+
+const nudge = () => {
+  if (!document.hasFocus()) {
+    getCurrentWindow().requestUserAttention(UserAttentionType.Informational);
+  }
+};
+
+const dispatch = async (key: string, text: string, images: Picture[] = []) => {
+  write(key, (live) => ({
+    ...said(
+      live,
+      text,
+      false,
+      images.map((image) => image.src)
+    ),
+    busy: true,
+    since: Date.now(),
+  }));
+  try {
+    await send(
+      key,
+      marked(text, images.length),
+      images.map((image) => image.path)
+    );
+  } catch (error) {
+    fail(key, error);
+  }
+};
+
+const settle = (key: string, live: Live) => {
+  if (live.stopping) {
+    const back = restored(live, drafts.get(key) ?? "");
+    drafts.set(key, back.draft);
+    lives.set(key, back.live);
+    return;
+  }
+  const [next, ...rest] = live.queue;
+  if (next !== undefined) {
+    lives.set(key, { ...live, queue: rest });
+    dispatch(key, next.text, next.images);
+  }
+};
+
+const save = (
+  key: string,
+  agent: Agent,
+  live: Live,
+  update: Extract<Update, { kind: "changes" }>
+) => {
+  if (!live.session) {
+    return;
+  }
+  const prompts = [...(stories.get(key) ?? []), ...live.entries].filter(
+    (entry) => entry.kind === "user"
+  ).length;
+  record(agent, live.session, {
+    files: update.files,
+    from: update.from,
+    to: update.to,
+    turn: prompts,
+  }).catch(() => null);
+};
+
+const away = (key: string) => viewing !== key || !document.hasFocus();
+
+const listen = (key: string, agent: Agent) => (update: Update) => {
+  const before = read(key);
+  const after = apply(before, update, Date.now());
+  lives.set(key, after);
+  if (update.kind === "changes") {
+    save(key, agent, after, update);
+  }
+  if (update.kind === "ask" && !waiting(before) && away(key)) {
+    alerting(key, "ask");
+  }
+  if (before.busy && !after.busy && !after.stopping && away(key)) {
+    unread.add(key);
+    alerting(key, after.entries.at(-1)?.kind === "failed" ? "failed" : "done");
+  }
+  if (update.kind === "state" && update.session) {
+    aliases.set(`${agent}:${update.session}`, key);
+  }
+  if (update.kind === "ask" || update.kind === "done") {
+    nudge();
+  }
+  if (before.busy && !after.busy) {
+    settle(key, after);
+    changed();
+  } else if (update.kind === "state" && update.session !== before.session) {
+    changed();
+  }
+  emit();
+};
+
+export const keyOf = (agent: Agent, id: string) =>
+  aliases.get(`${agent}:${id}`) ?? `${agent}:${id}`;
+
+export const watch = (refresh: () => void) => {
+  changed = refresh;
+};
+
+export const useLive = (key: string) =>
+  useSyncExternalStore(subscribe, () => read(key));
+
+export const useBusy = () => useSyncExternalStore(subscribe, () => busy);
+
+export const useMarks = () => useSyncExternalStore(subscribe, () => shown);
+
+export const alerts = (handler: (key: string, event: Event) => void) => {
+  alerting = handler;
+};
+
+export const view = (key: string | null) => {
+  viewing = key;
+  if (key && document.hasFocus()) {
+    unread.delete(key);
+  }
+  emit();
+};
+
+window.addEventListener("focus", () => {
+  if (viewing && unread.delete(viewing)) {
+    emit();
+  }
+});
+
+export const draft = (key: string) => drafts.get(key) ?? "";
+
+export const keep = (key: string, text: string) => {
+  drafts.set(key, text);
+};
+
+export const begin = async (opening: Opening) => {
+  if (opened.has(opening.key)) {
+    return;
+  }
+  opened.add(opening.key);
+  if (opening.mode) {
+    write(opening.key, (live) => ({
+      ...live,
+      mode: opening.mode ?? live.mode,
+    }));
+  }
+  try {
+    await start(opening, listen(opening.key, opening.agent));
+  } catch (error) {
+    opened.delete(opening.key);
+    fail(opening.key, error);
+  }
+};
+
+export const submit = async (
+  key: string,
+  text: string,
+  images: Picture[] = []
+) => {
+  drafts.set(key, "");
+  if (read(key).busy) {
+    write(key, (live) => ({
+      ...live,
+      queue: [...live.queue, { images, text }],
+    }));
+    return;
+  }
+  await dispatch(key, text, images);
+};
+
+export const unqueue = (key: string) => {
+  const live = read(key);
+  const last = live.queue.at(-1);
+  if (last === undefined) {
+    return null;
+  }
+  write(key, (current) => ({ ...current, queue: current.queue.slice(0, -1) }));
+  return last;
+};
+
+export const hurry = async (key: string, agent: Agent, text: string) => {
+  const live = read(key);
+  const message =
+    text.trim() === ""
+      ? live.queue.map((queued) => queued.text).join("\n\n")
+      : text;
+  if (message.trim() === "" || !live.busy) {
+    return false;
+  }
+  try {
+    if (await steer(key, message)) {
+      write(key, (current) => ({
+        ...said(current, message, true),
+        queue: text.trim() === "" ? [] : current.queue,
+      }));
+      return true;
+    }
+  } catch (error) {
+    fail(key, error);
+    return false;
+  }
+  write(key, (current) =>
+    apply(
+      {
+        ...current,
+        queue:
+          text.trim() === ""
+            ? current.queue
+            : [...current.queue, { images: [], text }],
+      },
+      {
+        kind: "note",
+        text: `${names[agent]} can't take a message mid-turn here, so it's queued for after`,
+      },
+      Date.now()
+    )
+  );
+  return true;
+};
+
+export const respond = async (key: string, ask: string, choice: Choice) => {
+  write(key, (live) => answered(live, ask, choice));
+  try {
+    await answer(key, ask, choice);
+  } catch (error) {
+    fail(key, error);
+  }
+};
+
+export const halt = async (key: string) => {
+  if (!read(key).busy) {
+    return;
+  }
+  write(key, (live) => ({ ...live, stopping: true }));
+  try {
+    await stop(key);
+  } catch (error) {
+    fail(key, error);
+  }
+};
+
+const noted = (key: string, text: string) =>
+  write(key, (live) => apply(live, { kind: "note", text }, Date.now()));
+
+export const retune = async (
+  key: string,
+  change: { model?: string; mode?: Mode; effort?: string },
+  quiet = false
+) => {
+  try {
+    const reply = await tune(key, change);
+    if (!quiet) {
+      noted(key, reply);
+    }
+  } catch (error) {
+    fail(key, error);
+  }
+};
+
+export const retitle = async (key: string, name: string) => {
+  try {
+    noted(key, await rename(key, name));
+    changed();
+    return true;
+  } catch (error) {
+    fail(key, error);
+    return false;
+  }
+};
+
+export const squash = async (key: string) => {
+  try {
+    await compact(key);
+  } catch (error) {
+    fail(key, error);
+  }
+};
+
+export const note = noted;
+
+export const aim = async (key: string, text: string) => {
+  try {
+    await goal(key, text);
+  } catch (error) {
+    fail(key, error);
+  }
+};
+
+export const move = async (
+  chat: { key: string; agent: Agent; folder: string },
+  id: string,
+  to: Agent
+) => {
+  if (read(chat.key).busy) {
+    noted(chat.key, "wait for this turn to finish, or stop it first");
+    return null;
+  }
+  try {
+    return await carry({ ...chat, from: chat.agent, id, to });
+  } catch (error) {
+    opened.delete(chat.key);
+    await begin({
+      agent: chat.agent,
+      effort: null,
+      folder: null,
+      id,
+      key: chat.key,
+      mode: null,
+      model: null,
+    });
+    fail(chat.key, error);
+    return null;
+  }
+};
+
+export const isOpen = (key: string) => opened.has(key);
+
+export const remembered = (key: string) => stories.get(key);
+
+export const remember = (key: string, entries: Entry[]) => {
+  stories.set(key, entries);
+};
+
+export const forget = (key: string) => {
+  opened.delete(key);
+  lives.delete(key);
+  stories.delete(key);
+  unread.delete(key);
+};
