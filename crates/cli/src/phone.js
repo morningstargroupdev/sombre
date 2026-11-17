@@ -498,12 +498,24 @@ const ring = (left) => {
 
 const gap = () =>
   document.body.scrollHeight - window.innerHeight - window.scrollY;
-const remember = (name, value) => localStorage.setItem(name, value);
+const slot = (name) => `${location.pathname.replace(/\/$/u, "")} ${name}`;
+
+const remember = (name, value) => localStorage.setItem(slot(name), value);
+
+const discard = (name) => {
+  localStorage.removeItem(slot(name));
+  localStorage.removeItem(name);
+  sessionStorage.removeItem(name);
+};
 
 const recall = (name) => {
-  const kept = localStorage.getItem(name) ?? sessionStorage.getItem(name);
+  const kept =
+    localStorage.getItem(slot(name)) ??
+    localStorage.getItem(name) ??
+    sessionStorage.getItem(name);
   if (kept !== null) {
-    localStorage.setItem(name, kept);
+    localStorage.setItem(slot(name), kept);
+    localStorage.removeItem(name);
   }
   return kept;
 };
@@ -544,6 +556,7 @@ const start = () => {
   const state = {
     after: 0,
     agent: "",
+    away: false,
     began: 0,
     busy: false,
     clock: 0,
@@ -732,8 +745,7 @@ const start = () => {
   if (fragment.get("k")) {
     remember("key", fragment.get("k"));
     remember("token", fragment.get("t") ?? "");
-    localStorage.removeItem("device");
-    sessionStorage.removeItem("device");
+    discard("device");
     state.device = null;
     history.replaceState(null, "", location.pathname);
   }
@@ -786,6 +798,12 @@ const start = () => {
       );
     }
   };
+  const receipt = (entry) => {
+    if (state.away) {
+      return "waiting for your mac";
+    }
+    return entry.queued ? "queued on your mac" : "sent";
+  };
   const stamp = (id, text) => {
     const held = pending.find((entry) => entry.id === id);
     if (held) {
@@ -818,7 +836,7 @@ const start = () => {
       outbox.shift();
       store();
       if (response.ok) {
-        stamp(next.id, next.queued ? "queued on your mac" : "sent");
+        stamp(next.id, receipt(next));
       } else {
         stamp(next.id, "not sent");
         add(element("p", "oops", await response.text()));
@@ -1140,6 +1158,54 @@ const start = () => {
   };
   let poll = null;
   let timer = 0;
+  const unpaired = (title) => {
+    mood("off", "disconnected");
+    form.hidden = true;
+    empty(title, "run /pair on your mac for a new link");
+  };
+  const received = (body) => {
+    state.tries = 0;
+    if (state.epoch && body.epoch !== state.epoch) {
+      state.epoch = body.epoch;
+      state.after = 0;
+      state.joined = false;
+      state.plan = null;
+      waiting.clear();
+      attention();
+      settle();
+      feed.replaceChildren();
+      pending.length = 0;
+      busy(false);
+      return false;
+    }
+    state.epoch = body.epoch;
+    for (const item of body.items) {
+      const message = open(key, item);
+      if (message?.kind === "rekey") {
+        key = unbase(message.key);
+        remember("key", message.key);
+      } else if (message && !(message.again && state.joined)) {
+        show(message);
+      }
+    }
+    if (!state.joined) {
+      arrive();
+    }
+    state.joined = true;
+    state.after = body.next;
+    if ("mac" in body) {
+      state.away = !body.mac;
+    }
+    if (state.away) {
+      mood("connecting", "waiting for your mac");
+    } else if (state.busy) {
+      mood("working", "working");
+    } else {
+      mood("live", "live on your mac");
+    }
+    deliver();
+    return true;
+  };
   const listen = async () => {
     clearTimeout(timer);
     poll?.abort();
@@ -1152,54 +1218,18 @@ const start = () => {
         { cache: "no-store", signal: control.signal }
       );
       if (response.status === 403) {
-        mood("off", "disconnected");
-        form.hidden = true;
-        empty(
-          "this phone isn't paired anymore",
-          "run /pair on your mac for a new link"
-        );
+        unpaired("this phone isn't paired anymore");
+        return;
+      }
+      if (response.status === 404) {
+        unpaired("this chat isn't paired anymore");
         return;
       }
       const body = await response.json();
       if (poll !== control) {
         return;
       }
-      state.tries = 0;
-      if (state.epoch && body.epoch !== state.epoch) {
-        state.epoch = body.epoch;
-        state.after = 0;
-        state.joined = false;
-        state.plan = null;
-        waiting.clear();
-        attention();
-        settle();
-        feed.replaceChildren();
-        pending.length = 0;
-        busy(false);
-        timer = setTimeout(listen, 0);
-        return;
-      }
-      state.epoch = body.epoch;
-      for (const item of body.items) {
-        const message = open(key, item);
-        if (message?.kind === "rekey") {
-          key = unbase(message.key);
-          remember("key", message.key);
-        } else if (message && !(message.again && state.joined)) {
-          show(message);
-        }
-      }
-      if (!state.joined) {
-        arrive();
-      }
-      state.joined = true;
-      state.after = body.next;
-      if (state.busy) {
-        mood("working", "working");
-      } else {
-        mood("live", "live on your mac");
-      }
-      deliver();
+      received(body);
       timer = setTimeout(listen, 0);
     } catch {
       if (poll !== control) {
@@ -1212,11 +1242,78 @@ const start = () => {
       clearTimeout(watchdog);
     }
   };
+  let socket = null;
+  let heard = 0;
+  const subscribe = () => {
+    clearTimeout(timer);
+    const old = socket;
+    socket = null;
+    old?.close();
+    const scheme = location.protocol === "https:" ? "wss" : "ws";
+    const current = new WebSocket(
+      `${scheme}://${location.host}${root}/events?device=${state.device}&after=${state.after}`
+    );
+    socket = current;
+    heard = Date.now();
+    current.addEventListener("message", (event) => {
+      if (socket !== current) {
+        return;
+      }
+      heard = Date.now();
+      if (event.data !== "pong" && !received(JSON.parse(event.data))) {
+        subscribe();
+      }
+    });
+    current.addEventListener("close", (event) => {
+      if (socket !== current) {
+        return;
+      }
+      socket = null;
+      if (event.code === 4403) {
+        unpaired("this phone isn't paired anymore");
+        return;
+      }
+      if (event.code === 4404) {
+        unpaired("this chat isn't paired anymore");
+        return;
+      }
+      state.tries += 1;
+      mood("connecting", away());
+      timer = setTimeout(subscribe, delay(state.tries));
+    });
+  };
+  const nudge = () => {
+    if (
+      socket?.readyState === WebSocket.OPEN &&
+      Date.now() - heard < PATIENCE / 2
+    ) {
+      socket.send("ping");
+      return;
+    }
+    if (socket?.readyState !== WebSocket.CONNECTING) {
+      subscribe();
+    }
+  };
+  const socketed =
+    document.querySelector('meta[name="relay"]')?.content === "socket";
+  const hear = socketed ? nudge : listen;
+  if (socketed) {
+    setInterval(() => {
+      if (socket?.readyState !== WebSocket.OPEN || document.hidden) {
+        return;
+      }
+      if (Date.now() - heard > PATIENCE) {
+        subscribe();
+      } else {
+        socket.send("ping");
+      }
+    }, PATIENCE / 3);
+  }
   const kick = () => {
     if (document.hidden || !state.device || form.hidden) {
       return;
     }
-    listen();
+    hear();
     deliver();
   };
   window.addEventListener("online", kick);
@@ -1359,7 +1456,7 @@ const start = () => {
     }
     form.hidden = false;
     busy(false);
-    listen();
+    hear();
   };
   connect();
 };
