@@ -171,6 +171,7 @@ const KEYS: [string, string][] = [
   [shortcut("k"), "command palette"],
   [shortcut("n"), "new chat"],
   [shortcut("f", true), "search chats"],
+  [shortcut("s", true), "settle this chat and open the next"],
   [shortcut("f"), "find in this chat"],
   [shortcut("d", true), "show or hide changes"],
   [shortcut("b"), "show or hide the sidebar"],
