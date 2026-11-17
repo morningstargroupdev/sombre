@@ -12,11 +12,11 @@
 > what is this?
 
   a desktop app for coding agents.
-  start a session on your mac, keep it going from your phone.
+  start a session on your machine, keep it going from your phone.
 
 > features?
 
-  ✓ runs claude code and codex on your mac
+  ✓ runs claude code and codex on your machine
   ✓ continue any session from your phone's browser
   ✓ approve commands and edits from anywhere
   ✓ one history per session, synced to both screens
