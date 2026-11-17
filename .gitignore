@@ -1,5 +1,7 @@
 /apps/desktop/src-tauri/gen
+/apps/relay/.wrangler
 /apps/desktop/dist
+/apps/relay/public
 *.tsbuildinfo
 next-env.d.ts
 node_modules

@@ -13,10 +13,11 @@
     "cli": "cargo install --quiet --path crates/cli --root ~/.local",
     "phone": "SOMBRE_PHONE=crates/cli/src sombre resume",
     "mock": "bun scripts/mock.ts",
+    "relay": "bun run --filter relay dev",
     "check": "ultracite check && cargo fmt --all --check && cargo clippy --all-targets -q && cargo clippy -p sombre-desktop --all-targets -q",
     "fix": "ultracite fix && cargo fmt --all",
-    "typecheck": "bun run --filter web --filter desktop typecheck",
-    "test": "bun run --filter web --filter desktop test && bun test crates/cli && cargo test -q && cargo test -p sombre-desktop -q",
+    "typecheck": "bun run --filter web --filter desktop --filter relay typecheck",
+    "test": "bun run --filter web --filter desktop --filter relay test && bun test crates/cli && cargo test -q && cargo test -p sombre-desktop -q",
     "verify": "bun run check && bun run typecheck && bun run test && bun run build && bun run --filter desktop build",
     "prepare": "husky",
     "bench": "bun scripts/bench.ts"
