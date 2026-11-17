@@ -232,7 +232,7 @@ export const open = (key, text) => {
 
 const PLACEHOLDER = /(?<placeholder>\[Image #\d+\])/u;
 const INLINE =
-  /`(?<code>[^`]+)`|\*\*(?<strong>[^*]+)\*\*|\*(?<em>[^*\s][^*]*)\*|\[(?<label>[^\]]+)\]\((?<href>https?:\/\/[^\s)]+)\)/gu;
+  /`(?<code>[^`]+)`|\*\*(?<strong>[^*]+)\*\*|\*(?<em>[^*\s][^*]*)\*|\[(?<label>[^\]]+)\]\((?<href>[^\s)]+)\)/gu;
 const ITEM = /^\s*(?:[-*+]|\d+[.)])\s+/u;
 const HEADING = /^(?<marks>#{1,6})\s+(?<title>.*)$/u;
 const RULE = /^(?:-{3,}|\*{3,}|_{3,})\s*$/u;
@@ -272,12 +272,16 @@ const inline = (parent, text) => {
       parent.append(element("code", "", plain));
     } else if (strong !== undefined) {
       parent.append(element("strong", "", strong));
-    } else if (em === undefined) {
+    } else if (em === undefined && /^https?:\/\//u.test(href)) {
       const link = element("a", "", label);
       link.href = href;
       link.rel = "noreferrer noopener";
       link.target = "_blank";
       parent.append(link);
+    } else if (em === undefined) {
+      const named = element("span", "", label);
+      named.title = href;
+      parent.append(named);
     } else {
       parent.append(element("em", "", em));
     }
