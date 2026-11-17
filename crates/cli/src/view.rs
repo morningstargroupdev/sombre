@@ -58,6 +58,7 @@ enum Entry {
     Beside(Vec<String>),
     Help,
     Line(String),
+    Pairing(String, crate::relay::Reach),
     Typed(bool, String),
     Stepped,
 }
@@ -293,7 +294,9 @@ Entry::Typed(false, text) if text.starts_with('/') => None,
 }
 
 pub fn pairing(url: &str, reach: crate::relay::Reach) {
+    keep(Entry::Pairing(url.to_string(), reach));
     gap();
+    let room = width().saturating_sub(4).max(10);
     let code = qrcode::QrCode::new(url.as_bytes()).map(|code| {
         code.render::<qrcode::render::unicode::Dense1x2>()
             .quiet_zone(true)
@@ -301,35 +304,50 @@ pub fn pairing(url: &str, reach: crate::relay::Reach) {
             .light_color(qrcode::render::unicode::Dense1x2::Dark)
             .build()
     });
-    if let Ok(code) = code {
+    let shown = code
+        .ok()
+        .filter(|code| code.lines().all(|row| cells(row) <= room));
+    if let Some(code) = &shown {
         for row in code.lines() {
-            line(&format!("  {row}"));
+            put(&format!("  {row}"));
+        }
+        put("");
+    }
+    let lead = if shown.is_some() {
+        "scan this with your phone's camera"
+    } else {
+        "open this link on your phone. a wider window shows a code to scan"
+    };
+    for row in wrap(lead, room) {
+        put(&format!("  {}", bold(&row)));
+    }
+    let about = match reach {
+        crate::relay::Reach::Hosted => {
+            "it opens this chat in your phone's browser, from anywhere. sombre's relay only passes sealed messages"
+        }
+        crate::relay::Reach::Relay => {
+            "it opens this chat in your phone's browser, from anywhere, through your relay"
+        }
+        crate::relay::Reach::Tailnet => {
+            "it opens this chat in your phone's browser, from anywhere, while tailscale is on on both"
+        }
+        crate::relay::Reach::Wifi => {
+            "it opens this chat in your phone's browser. you both need the same wi-fi"
+        }
+    };
+    for text in [
+        about,
+        "the link holds the key, so only that phone can read the chat. it works once. /pair list shows paired phones",
+    ] {
+        for row in wrap(text, room) {
+            put(&format!("  {}", dim(&row)));
         }
     }
-    line("");
-    line(&format!("  {}", bold("scan this with your phone's camera")));
-    line(&format!(
-        "  {}",
-        dim(match reach {
-            crate::relay::Reach::Relay => {
-                "it opens this chat in your phone's browser, from anywhere, through your relay"
-            }
-            crate::relay::Reach::Tailnet => {
-                "it opens this chat in your phone's browser, from anywhere, while tailscale is on on both"
-            }
-            crate::relay::Reach::Wifi => {
-                "it opens this chat in your phone's browser. you both need the same wi-fi"
-            }
-        })
-    ));
-    line(&format!(
-        "  {}",
-        dim(
-            "the link holds the key, so only that phone can read the chat. it works once. /pair list shows paired phones"
-        )
-    ));
-    line(&format!("  {}", dim(url)));
-    line("");
+    let characters: Vec<char> = url.chars().collect();
+    for piece in characters.chunks(room) {
+        put(&format!("  {}", dim(&piece.iter().collect::<String>())));
+    }
+    put("");
 }
 
 pub fn typed(shell: bool, text: &str) {
@@ -371,6 +389,7 @@ fn show(entry: Entry) {
         Entry::Beside(side) => beside(&side),
         Entry::Help => help(),
         Entry::Line(text) => put(&text),
+        Entry::Pairing(url, reach) => pairing(&url, reach),
         Entry::Typed(shell, text) => typed(shell, &text),
         Entry::Stepped => stepped(),
     }

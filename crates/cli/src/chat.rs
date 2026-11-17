@@ -888,11 +888,11 @@ fn settings(engine: &Engine, roots: &Roots) -> Option<Input> {
                 Setting::Phone,
                 "phone",
                 match reached(&config) {
-                    Reach::Wifi => "this wi-fi".to_string(),
+                    Reach::Hosted | Reach::Wifi => "sombre's relay".to_string(),
                     Reach::Tailnet => "tailscale".to_string(),
                     Reach::Relay => config.relay.clone().unwrap_or_default(),
                 },
-                "how /pair reaches your phone. this wi-fi needs no setup, tailscale and a relay work from anywhere",
+                "how /pair reaches your phone when you pick anywhere. home network is always there too",
             ),
             (
                 Setting::Publish,
@@ -986,34 +986,44 @@ fn reached(config: &Config) -> Reach {
     } else if config.relay.is_some() {
         Reach::Relay
     } else {
-        Reach::Wifi
+        Reach::Hosted
     }
 }
 
+fn way(config: &Config) -> Option<Reach> {
+    let anywhere = reached(config);
+    crate::menu::select("where will your phone be?")
+        .item(
+            anywhere,
+            "anywhere",
+            match anywhere {
+                Reach::Tailnet => "over tailscale, on both devices",
+                Reach::Relay => "through your own relay",
+                Reach::Hosted | Reach::Wifi => "via sombre's relay, sealed end to end",
+            },
+        )
+        .item(Reach::Wifi, "home network", "only on this wi-fi")
+        .initial_value(anywhere)
+        .interact()
+        .ok()
+}
+
 fn phone(config: &mut Config) -> bool {
-    let Ok(picked) = crate::menu::select("how should /pair reach your phone?")
+    let Ok(picked) = crate::menu::select("how should /pair reach your phone from anywhere?")
         .item(
-            Reach::Wifi,
-            "this wi-fi",
-            "no setup. your phone needs the same wi-fi",
+            Reach::Hosted,
+            "sombre's relay",
+            "no setup, sealed end to end",
         )
-        .item(
-            Reach::Tailnet,
-            "tailscale",
-            "from anywhere. your phone needs tailscale on the same tailnet",
-        )
-        .item(
-            Reach::Relay,
-            "a relay",
-            "from anywhere, through a sombre relay you run",
-        )
+        .item(Reach::Tailnet, "tailscale", "both on the same tailnet")
+        .item(Reach::Relay, "your own relay", "a sombre relay you run")
         .initial_value(reached(config))
         .interact()
     else {
         return false;
     };
     match picked {
-        Reach::Wifi => {
+        Reach::Hosted | Reach::Wifi => {
             config.tailscale = false;
             config.relay = None;
         }
@@ -1946,7 +1956,15 @@ fn pair(engine: &Engine, roots: Option<&Roots>, command: &str) {
                 .and_then(|roots| Config::load(&roots.sombre).ok())
                 .unwrap_or_default();
             let fresh = !crate::relay::paired();
-            match crate::relay::invite(reached(&config), config.relay.as_deref()) {
+            let reach = if fresh {
+                way(&config)
+            } else {
+                Some(reached(&config))
+            };
+            let Some(reach) = reach else {
+                return;
+            };
+            match crate::relay::invite(reach, config.relay.as_deref()) {
                 Ok((url, reach)) => {
                     if fresh {
                         for item in shared(engine) {

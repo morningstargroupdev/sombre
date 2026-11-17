@@ -22,6 +22,10 @@ sombre-core.workspace = true
 sombre-engine.workspace = true
 sombre-harness.workspace = true
 textwrap = "0.16.4"
+tungstenite = { version = "0.30.0", default-features = false, features = [
+  "handshake",
+  "rustls-tls-webpki-roots",
+] }
 unicode-width = "0.2.3"
 
 [target.'cfg(unix)'.dependencies]

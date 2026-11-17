@@ -17,6 +17,7 @@ mod size;
 mod streak;
 mod tailscale;
 mod view;
+mod wire;
 
 use std::env;
 use std::io::{self, IsTerminal};

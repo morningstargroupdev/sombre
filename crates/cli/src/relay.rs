@@ -14,6 +14,7 @@ use ring::rand::{SecureRandom, SystemRandom};
 use serde_json::{Value, json};
 
 use crate::tailscale::Node;
+use crate::wire::Wire;
 
 const PAGE: &str = include_str!("phone.html");
 const SCRIPT: &str = include_str!("phone.js");
@@ -24,6 +25,7 @@ const ROOMS: usize = 500;
 const WAIT: Duration = Duration::from_secs(25);
 const SEEN: usize = 64;
 const PHOTOS: usize = 4;
+const HOSTED: &str = "https://sombre.si";
 
 type Rooms = HashMap<String, Room>;
 
@@ -501,6 +503,7 @@ pub enum Reach {
     Wifi,
     Tailnet,
     Relay,
+    Hosted,
 }
 
 enum Link {
@@ -513,11 +516,49 @@ enum Link {
         reach: Reach,
         forwarded: Option<PathBuf>,
     },
-    There {
-        base: String,
-        room: String,
-        secret: String,
-    },
+    There(Remote),
+    Cloud(Remote, Arc<Wire>),
+}
+
+struct Remote {
+    base: String,
+    room: String,
+    secret: String,
+}
+
+impl Remote {
+    fn call(&self, method: &str, action: &str, query: &str, body: &str) -> Option<String> {
+        let Self { base, room, secret } = self;
+        let url = format!("{base}/r/{room}/{action}?secret={secret}&{query}");
+        let agent: ureq::Agent = ureq::Agent::config_builder()
+            .timeout_global(Some(Duration::from_secs(40)))
+            .build()
+            .into();
+        let response = if method == "POST" {
+            agent.post(&url).send(body)
+        } else {
+            agent.get(&url).call()
+        };
+        response.ok()?.body_mut().read_to_string().ok()
+    }
+
+    fn page(&self) -> String {
+        format!("{}/r/{}", self.base, self.room)
+    }
+
+    fn gone(&self) -> bool {
+        let Self { base, room, secret } = self;
+        let agent: ureq::Agent = ureq::Agent::config_builder()
+            .timeout_global(Some(Duration::from_secs(10)))
+            .build()
+            .into();
+        matches!(
+            agent
+                .get(&format!("{base}/r/{room}/devices?secret={secret}"))
+                .call(),
+            Err(ureq::Error::StatusCode(403 | 404))
+        )
+    }
 }
 
 impl Link {
@@ -538,26 +579,26 @@ impl Link {
                 let (status, _, text) = hub.handle(&request);
                 status.starts_with("200").then_some(text)
             }
-            Self::There { base, room, secret } => {
-                let url = format!("{base}/r/{room}/{action}?secret={secret}&{query}");
-                let agent: ureq::Agent = ureq::Agent::config_builder()
-                    .timeout_global(Some(Duration::from_secs(40)))
-                    .build()
-                    .into();
-                let response = if method == "POST" {
-                    agent.post(&url).send(body)
-                } else {
-                    agent.get(&url).call()
-                };
-                response.ok()?.body_mut().read_to_string().ok()
-            }
+            Self::There(remote) => remote.call(method, action, query, body),
+            Self::Cloud(remote, wire) => match (method, action) {
+                ("GET", "in") => wire.next(),
+                ("POST", "out") => {
+                    wire.push(body.to_string());
+                    Some("ok".to_string())
+                }
+                ("GET", "devices") => wire
+                    .devices()
+                    .or_else(|| remote.call(method, action, query, body)),
+                _ => remote.call(method, action, query, body),
+            },
         }
     }
 
     const fn reach(&self) -> Reach {
         match self {
             Self::Here { reach, .. } => *reach,
-            Self::There { .. } => Reach::Relay,
+            Self::There(_) => Reach::Relay,
+            Self::Cloud(..) => Reach::Hosted,
         }
     }
 
@@ -568,7 +609,7 @@ impl Link {
                 address: (ip, port),
                 ..
             } => format!("http://{ip}:{port}/r/{room}"),
-            Self::There { base, room, .. } => format!("{base}/r/{room}"),
+            Self::There(remote) | Self::Cloud(remote, _) => remote.page(),
         }
     }
 }
@@ -722,10 +763,15 @@ fn snapshot(session: &Session) -> Value {
                 saved["via"] = json!("tailnet");
             }
         }
-        Link::There { base, room, secret } => {
-            saved["room"] = json!(room);
-            saved["secret"] = json!(secret);
-            saved["relay"] = json!(base);
+        Link::There(remote) => {
+            saved["room"] = json!(remote.room);
+            saved["secret"] = json!(remote.secret);
+            saved["relay"] = json!(remote.base);
+        }
+        Link::Cloud(remote, _) => {
+            saved["room"] = json!(remote.room);
+            saved["secret"] = json!(remote.secret);
+            saved["hosted"] = json!(remote.base);
         }
     }
     saved
@@ -753,7 +799,7 @@ fn keep(session: &Session) {
 fn start(link: Link, key: [u8; 32]) -> Arc<Session> {
     let pause = match link {
         Link::Here { .. } => Duration::from_secs(2),
-        Link::There { .. } => Duration::from_secs(20),
+        Link::There(_) | Link::Cloud(..) => Duration::from_secs(20),
     };
     let session = Arc::new(Session {
         answers: Mutex::new(VecDeque::new()),
@@ -791,7 +837,7 @@ fn here(reach: Reach) -> Result<Link, String> {
                 }
             }
         }
-        Reach::Wifi | Reach::Relay => {
+        Reach::Wifi | Reach::Relay | Reach::Hosted => {
             let ip = address();
             here_at(ip, ip, reach)
         }
@@ -839,25 +885,46 @@ fn here_at(ip: IpAddr, bind: IpAddr, reach: Reach) -> io::Result<Link> {
     })
 }
 
-fn there(base: &str) -> Result<Link, String> {
+fn made(base: &str, name: &str) -> Result<Remote, String> {
     let base = base.trim_end_matches('/').to_string();
     let password = std::env::var("SOMBRE_RELAY_PASSWORD").unwrap_or_default();
     let body = ureq::post(&format!("{base}/rooms?password={password}"))
         .send("")
-        .map_err(|error| format!("couldn't reach the relay at {base}: {error}"))?
+        .map_err(|error| match error {
+            ureq::Error::StatusCode(429) => {
+                "too many new pairings from this network. try /pair again in a minute".to_string()
+            }
+            ureq::Error::StatusCode(403) => format!("{name} doesn't take new pairings"),
+            _ => format!(
+                "couldn't reach {name}. check your connection, or pick home network in /pair"
+            ),
+        })?
         .body_mut()
         .read_to_string()
         .map_err(|error| error.to_string())?;
     let reply: Value = serde_json::from_str(&body)
-        .map_err(|_| "the relay sent something sombre couldn't read".to_string())?;
+        .map_err(|_| format!("{name} sent something sombre couldn't read"))?;
     match (reply["room"].as_str(), reply["secret"].as_str()) {
-        (Some(room), Some(secret)) => Ok(Link::There {
+        (Some(room), Some(secret)) => Ok(Remote {
             base,
             room: room.to_string(),
             secret: secret.to_string(),
         }),
-        _ => Err("the relay didn't make a room".to_string()),
+        _ => Err(format!("{name} didn't make a room")),
     }
+}
+
+fn hosted() -> String {
+    std::env::var("SOMBRE_HOSTED").unwrap_or_else(|_| HOSTED.to_string())
+}
+
+fn cloud(remote: Remote) -> Link {
+    let wire = Wire::open(crate::wire::address(
+        &remote.base,
+        &remote.room,
+        &remote.secret,
+    ));
+    Link::Cloud(remote, wire)
 }
 
 pub fn invite(reach: Reach, relay: Option<&str>) -> Result<(String, Reach), String> {
@@ -865,7 +932,10 @@ pub fn invite(reach: Reach, relay: Option<&str>) -> Result<(String, Reach), Stri
         Some(session) => session,
         None => start(
             match (reach, relay) {
-                (Reach::Relay, Some(base)) => there(base)?,
+                (Reach::Hosted, _) => cloud(made(&hosted(), "sombre's relay")?),
+                (Reach::Relay, Some(base)) => {
+                    Link::There(made(base, &format!("the relay at {base}"))?)
+                }
                 (Reach::Relay, None) => return Err("there's no relay set".to_string()),
                 (reach, _) => here(reach)?,
             },
@@ -901,6 +971,9 @@ pub fn close() -> bool {
 }
 
 fn halt(link: &Link) {
+    if let Link::Cloud(_, wire) = link {
+        wire.stop();
+    }
     if let Link::Here {
         hub,
         address: (_, port),
@@ -980,18 +1053,22 @@ fn reopen() -> Result<bool, String> {
     else {
         return Ok(false);
     };
-    let link = if let Some(base) = saved["relay"].as_str() {
-        let link = Link::There {
+    let link = if let Some(base) = saved["relay"].as_str().or(saved["hosted"].as_str()) {
+        let remote = Remote {
             base: base.to_string(),
             room: room.to_string(),
             secret: secret.to_string(),
         };
-        if link.call("GET", "devices", "", "").is_none() {
+        if remote.gone() {
             return Err(
                 "the relay no longer has your phone's pairing. /pair makes a new link".to_string(),
             );
         }
-        link
+        if saved["hosted"].is_string() {
+            cloud(remote)
+        } else {
+            Link::There(remote)
+        }
     } else {
         let reach = if saved["via"] == "tailnet" {
             Reach::Tailnet
@@ -1002,14 +1079,14 @@ fn reopen() -> Result<bool, String> {
             Reach::Tailnet => Some(tailnet().ok_or(
                 "tailscale isn't connected, so your phone can't reach this mac. turn it on, or run /pair for a new link",
             )?),
-            Reach::Wifi | Reach::Relay => None,
+            Reach::Wifi | Reach::Relay | Reach::Hosted => None,
         };
         let ip = node.as_ref().map_or_else(address, Node::ip);
         let bind = node.as_ref().map_or(ip, Node::bind);
         if saved["ip"].as_str() != Some(ip.to_string().as_str()) {
             return Err(match reach {
                 Reach::Tailnet => "your mac's tailscale address changed, so your phone needs a new link. run /pair",
-                Reach::Wifi | Reach::Relay => "your mac's wi-fi address changed, so your phone needs a new link. run /pair",
+                Reach::Wifi | Reach::Relay | Reach::Hosted => "your mac's wi-fi address changed, so your phone needs a new link. run /pair",
             }
             .to_string());
         }
