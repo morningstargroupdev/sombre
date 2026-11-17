@@ -1,7 +1,6 @@
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SplitText } from "gsap/SplitText";
-import Lenis from "lenis";
 
 export const ease = {
   in: "power3.in",
@@ -12,7 +11,6 @@ export const ease = {
 export const still = () =>
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-let lenis: Lenis | null = null;
 let booted = false;
 
 export const boot = () => {
@@ -21,26 +19,15 @@ export const boot = () => {
   }
   booted = true;
   gsap.registerPlugin(ScrollTrigger, SplitText);
-  if (still()) {
-    return;
-  }
-  lenis = new Lenis({ anchors: true, lerp: 0.11 });
-  lenis.on("scroll", ScrollTrigger.update);
-  gsap.ticker.add((time) => lenis?.raf(time * 1000));
-  gsap.ticker.lagSmoothing(0);
 };
 
 export const scroll = (target: number | string, instant = false) => {
-  if (lenis) {
-    lenis.resize();
-    lenis.scrollTo(target, { force: true, immediate: instant });
-    return;
-  }
+  const behavior = instant || still() ? "instant" : "smooth";
   if (typeof target === "number") {
-    window.scrollTo({ top: target });
+    window.scrollTo({ behavior, top: target });
     return;
   }
-  document.querySelector(target)?.scrollIntoView();
+  document.querySelector(target)?.scrollIntoView({ behavior });
 };
 
 const split = (node: HTMLElement) => {
