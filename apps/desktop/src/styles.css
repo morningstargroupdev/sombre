@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #0f1011;
+  --color-raise: #161819;
+  --color-well: #1c1f20;
+  --color-rim: #272a2c;
+  --color-edge: #3a3e41;
+  --color-paper: #edefef;
+  --color-body: #c3c8ca;
+  --color-fog: #9aa0a3;
+  --color-ember: #ff5b14;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --animate-appear: appear 160ms ease-out both;
+  --animate-pop: appear 90ms ease-out both;
+  --animate-late: appear 160ms ease-out 200ms both;
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+  }
+}
+
+html {
+  background: var(--color-ink);
+  color: var(--color-body);
+  color-scheme: dark;
+  font: 13.5px/1.65 var(--font-mono);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+}
+
+::selection {
+  background: var(--color-ember);
+  color: var(--color-ink);
+}
+
+@custom-variant keys (&:where([data-keys] *));
+
+@layer base {
+  :focus-visible {
+    outline: none;
+  }
+
+  [data-keys] :focus-visible {
+    outline: 1px solid var(--color-paper);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  input:focus-visible,
+  textarea:focus-visible {
+    outline: none;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 10px;
+  background: var(--color-rim) padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::highlight(find) {
+  background-color: color-mix(in oklab, var(--color-ember) 28%, transparent);
+  color: var(--color-paper);
+}
+
+::highlight(found) {
+  background-color: var(--color-ember);
+  color: var(--color-ink);
+}
