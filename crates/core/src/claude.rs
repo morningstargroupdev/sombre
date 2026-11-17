@@ -152,7 +152,9 @@ pub fn timeline(path: &Path) -> Vec<Item> {
         .lines()
         .map_while(Result::ok)
         .filter_map(|line| serde_json::from_str::<Value>(&line).ok())
-        .filter(|entry| !entry["isSidechain"].as_bool().unwrap_or(false))
+        .filter(|entry| {
+            !entry["isSidechain"].as_bool().unwrap_or(false) && entry["isApiErrorMessage"] != true
+        })
     {
         let content = &entry["message"]["content"];
         if typed(&entry)
@@ -546,6 +548,7 @@ mod tests {
                 r#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"bun test"}}]}}"#,
                 r#"{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"3 pass"}]}}"#,
                 r#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"all green"}]}}"#,
+                r#"{"type":"assistant","isApiErrorMessage":true,"error":"unknown","apiErrorStatus":400,"message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"API Error: 400 nope"}]}}"#,
             ],
         );
         assert_eq!(

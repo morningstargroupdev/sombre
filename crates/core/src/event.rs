@@ -151,6 +151,7 @@ pub fn claude(line: &str) -> Vec<Event> {
                 .unwrap_or_default()
         }
         Some("user") => result(&entry),
+        Some("assistant") if entry["is_api_error_message"] == true => Vec::new(),
         Some("assistant") => blocks(&entry["message"]["content"]),
         Some("control_request") if entry["request"]["subtype"] == "can_use_tool" => {
             let request = &entry["request"];
@@ -181,13 +182,13 @@ pub fn claude(line: &str) -> Vec<Event> {
             }]
         }
         Some("result") if entry["is_error"].as_bool().unwrap_or(false) => {
-            vec![Event::Failed(
+            vec![Event::Failed(explain(
                 entry["result"]
                     .as_str()
                     .filter(|text| !text.is_empty())
-                    .unwrap_or("the turn failed")
-                    .to_string(),
-            )]
+                    .unwrap_or("the turn failed"),
+                entry["api_error_code"].as_str(),
+            ))]
         }
         Some("result") => vec![Event::Done {
             cost: entry["total_cost_usd"].as_f64(),
@@ -195,6 +196,21 @@ pub fn claude(line: &str) -> Vec<Event> {
             millis: entry["duration_ms"].as_u64(),
         }],
         _ => Vec::new(),
+    }
+}
+
+fn explain(text: &str, code: Option<&str>) -> String {
+    let plain = text.strip_prefix("API Error: ").map_or(text, |rest| {
+        rest.trim_start_matches(|character: char| character.is_ascii_digit())
+            .trim_start()
+    });
+    let plain = serde_json::from_str::<Value>(plain)
+        .ok()
+        .and_then(|body| body["error"]["message"].as_str().map(str::to_string))
+        .unwrap_or_else(|| plain.to_string());
+    match code {
+        Some("model_not_available") => format!("{plain} Pick another model to keep going."),
+        _ => plain,
     }
 }
 
@@ -677,6 +693,39 @@ mod tests {
                 r#"{"type":"result","subtype":"error_during_execution","is_error":true,"result":""}"#
             ),
             vec![Event::Failed("the turn failed".to_string())]
+        );
+    }
+
+    #[test]
+    fn claude_api_errors_show_once_without_the_status_code() {
+        assert_eq!(
+            claude(
+                r#"{"type":"assistant","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"API Error: 400 In order to access this model, your organization or workspace must have data retention enabled."}]},"error":"unknown","is_api_error_message":true,"api_error_status":400,"api_error_type":"invalid_request_error","api_error_code":"model_not_available"}"#
+            ),
+            Vec::new()
+        );
+        assert_eq!(
+            claude(
+                r#"{"type":"result","subtype":"success","is_error":true,"result":"API Error: 400 In order to access this model, your organization or workspace must have data retention enabled.","api_error_status":400,"api_error_type":"invalid_request_error","api_error_code":"model_not_available","terminal_reason":"api_error"}"#
+            ),
+            vec![Event::Failed(
+                "In order to access this model, your organization or workspace must have data retention enabled. Pick another model to keep going."
+                    .to_string()
+            )]
+        );
+        assert_eq!(
+            claude(
+                r#"{"type":"result","subtype":"success","is_error":true,"result":"API Error: 529 {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded\"}}"}"#
+            ),
+            vec![Event::Failed("Overloaded".to_string())]
+        );
+        assert_eq!(
+            claude(
+                r#"{"type":"result","subtype":"success","is_error":true,"result":"Not logged in · Please run /login"}"#
+            ),
+            vec![Event::Failed(
+                "Not logged in · Please run /login".to_string()
+            )]
         );
     }
 
