@@ -110,11 +110,23 @@ impl Event {
     }
 }
 
+pub fn begins(line: &str) -> bool {
+    line.contains(r#""subtype":"init""#)
+        && serde_json::from_str::<Value>(line)
+            .is_ok_and(|entry| entry["type"] == "system" && entry["subtype"] == "init")
+}
+
 pub fn claude(line: &str) -> Vec<Event> {
     let Ok(entry) = serde_json::from_str::<Value>(line) else {
         return Vec::new();
     };
     match entry["type"].as_str() {
+        Some("system") if entry["subtype"] == "task_notification" => entry["summary"]
+            .as_str()
+            .map(str::trim)
+            .filter(|summary| !summary.is_empty())
+            .map(|summary| vec![Event::Note(summary.to_string())])
+            .unwrap_or_default(),
         Some("system") if entry["subtype"] == "init" => [
             entry["session_id"]
                 .as_str()
@@ -698,6 +710,34 @@ mod tests {
             ),
             vec![Event::Failed("the turn failed".to_string())]
         );
+    }
+
+    #[test]
+    fn claude_says_when_a_background_task_wakes_it() {
+        let finished = r#"{"type":"system","subtype":"task_notification","task_id":"bg1","run_id":"r1","tool_use_id":"toolu_1","status":"completed","output_file":"/tmp/claude/tasks/bg1.output","summary":"Background command \"Sleep 12 seconds then echo finished\" completed (exit code 0)"}"#;
+        assert_eq!(
+            claude(finished),
+            vec![Event::Note(
+                "Background command \"Sleep 12 seconds then echo finished\" completed (exit code 0)"
+                    .to_string()
+            )]
+        );
+        assert_eq!(
+            claude(
+                r#"{"type":"system","subtype":"task_updated","task_id":"bg1","patch":{"status":"completed"}}"#
+            ),
+            Vec::new()
+        );
+        let init = r#"{"type":"system","subtype":"init","cwd":"/work","session_id":"s1","model":"claude-haiku-5-5"}"#;
+        assert!(begins(init));
+        assert!(!begins(finished));
+        assert!(!begins(
+            r#"{"type":"user","message":{"content":"{\"subtype\":\"init\"}"}}"#
+        ));
+        assert!(!begins(
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"\"subtype\":\"init\""}]}}"#
+        ));
+        assert!(!begins("not json"));
     }
 
     #[test]

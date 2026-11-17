@@ -9,6 +9,8 @@ use std::ffi::OsString;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -54,6 +56,7 @@ pub struct Engine {
     published: bool,
     server: Option<Server>,
     told: Option<Mode>,
+    woke: Arc<AtomicUsize>,
 }
 
 impl Engine {
@@ -83,7 +86,16 @@ impl Engine {
             shared: Shared::default(),
             told: None,
             turn: None,
+            woke: Arc::new(AtomicUsize::new(0)),
         }
+    }
+
+    pub fn bell(&self) -> Arc<AtomicUsize> {
+        Arc::clone(&self.woke)
+    }
+
+    pub fn woke(&self) -> bool {
+        self.woke.load(Ordering::SeqCst) > 0
     }
 
     pub fn name(&self) -> &'static str {
@@ -383,6 +395,13 @@ impl Engine {
         };
         match output.recv_timeout(wait) {
             Ok(Output::Line(line)) => {
+                if self.agent == Agent::Claude && event::begins(&line) {
+                    let _ = self
+                        .woke
+                        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                            count.checked_sub(1)
+                        });
+                }
                 let events = match (self.agent, self.server.as_mut()) {
                     (_, Some(server)) => server.read(&line),
                     (Agent::Claude, None) => event::claude(&line),
@@ -524,11 +543,18 @@ impl Engine {
             .stderr(Stdio::piped())
             .spawn()?;
         process::track(child.id());
+        self.woke.store(0, Ordering::SeqCst);
         let (sender, receiver) = mpsc::channel();
         if let Some(stdout) = child.stdout.take() {
             let sender = sender.clone();
+            let woke = (program == "claude").then(|| Arc::clone(&self.woke));
             thread::spawn(move || {
                 for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                    if let Some(woke) = &woke
+                        && event::begins(&line)
+                    {
+                        woke.fetch_add(1, Ordering::SeqCst);
+                    }
                     if sender.send(Output::Line(line)).is_err() {
                         break;
                     }
