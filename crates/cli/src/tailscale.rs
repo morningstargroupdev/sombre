@@ -1,6 +1,5 @@
-use std::io::{self, Read, Write};
+use std::io;
 use std::net::{IpAddr, Ipv4Addr};
-use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
@@ -198,6 +197,18 @@ fn swap(socket: &Path, change: &impl Fn(&mut Value) -> io::Result<bool>) -> io::
     .map(|_| ())
 }
 
+#[cfg(not(unix))]
+fn local(
+    _socket: &Path,
+    _method: &str,
+    _action: &str,
+    _extra: &[(&str, &str)],
+    _body: &str,
+) -> io::Result<(String, String)> {
+    Err(io::ErrorKind::Unsupported.into())
+}
+
+#[cfg(unix)]
 fn local(
     socket: &Path,
     method: &str,
@@ -205,6 +216,9 @@ fn local(
     extra: &[(&str, &str)],
     body: &str,
 ) -> io::Result<(String, String)> {
+    use std::io::{Read, Write};
+    use std::os::unix::net::UnixStream;
+
     let mut stream = UnixStream::connect(socket)?;
     stream.set_read_timeout(Some(Duration::from_secs(3)))?;
     stream.set_write_timeout(Some(Duration::from_secs(3)))?;
@@ -246,6 +260,10 @@ fn local(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::io::{Read, Write};
+    #[cfg(unix)]
+    use std::os::unix::net::UnixStream;
 
     #[test]
     fn knows_a_tailscale_address_when_it_sees_one() {
@@ -290,6 +308,7 @@ mod tests {
         assert_eq!(Node::Kernel(ip).bind(), ip);
     }
 
+    #[cfg(unix)]
     fn fake(
         config: &str,
     ) -> (
@@ -338,6 +357,7 @@ mod tests {
         (folder, socket, server)
     }
 
+    #[cfg(unix)]
     fn posted(server: std::thread::JoinHandle<Vec<String>>) -> Option<Value> {
         server
             .join()
@@ -346,6 +366,7 @@ mod tests {
             .and_then(|body| serde_json::from_str(body).ok())
     }
 
+    #[cfg(unix)]
     #[test]
     fn forwards_a_port_and_keeps_what_was_served() {
         let (_folder, socket, server) =
@@ -357,6 +378,7 @@ mod tests {
         assert!(config["Web"]["mac:443"].is_object());
     }
 
+    #[cfg(unix)]
     #[test]
     fn forwards_into_an_empty_config() {
         let (_folder, socket, server) = fake("null");
@@ -365,6 +387,7 @@ mod tests {
         assert_eq!(config["TCP"]["4000"]["TCPForward"], "127.0.0.1:4000");
     }
 
+    #[cfg(unix)]
     #[test]
     fn wont_take_a_port_something_else_serves() {
         let (_folder, socket, server) = fake(r#"{"TCP":{"4000":{"TCPForward":"127.0.0.1:9999"}}}"#);
@@ -377,6 +400,7 @@ mod tests {
         assert_eq!(posted(server), None);
     }
 
+    #[cfg(unix)]
     #[test]
     fn leaves_a_config_it_cant_read_alone() {
         let (_folder, socket, server) = fake(r#"{"TCP":{"443":"#);
@@ -385,6 +409,7 @@ mod tests {
         assert_eq!(posted(server), None);
     }
 
+    #[cfg(unix)]
     #[test]
     fn unforwards_only_its_own_entry() {
         let (_folder, socket, server) = fake(
