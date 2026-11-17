@@ -4,7 +4,7 @@ import { Caret, Lines } from "@/components/art/terminal";
 import type { Line } from "@/components/art/terminal";
 
 const lines: Line[] = [
-  { text: "sombre start", tone: "command" },
+  { text: "sombre", tone: "command" },
   { text: "Starting Claude Code in ~/code/atlas", tone: "output" },
   { aside: "pid 4182", text: "Agent running on this Mac", tone: "done" },
   { aside: "0 B sent", text: "Files stay on disk", tone: "done" },

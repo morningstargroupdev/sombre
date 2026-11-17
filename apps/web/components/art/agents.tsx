@@ -8,7 +8,7 @@ const options = [
 ] as const;
 
 const before: Line[] = [
-  { text: "sombre new", tone: "command" },
+  { text: "sombre", tone: "command" },
   { text: "Which agent?", tone: "ask" },
 ];
 
@@ -21,7 +21,7 @@ const after: Line[] = [
 export const Agents = () => (
   <Window
     className="absolute top-6 left-1/2 w-[min(420px,88%)] -translate-x-1/2"
-    name="sombre new"
+    name="sombre"
   >
     <div className="px-4 pt-3.5 pb-10">
       <Lines lines={before} />
