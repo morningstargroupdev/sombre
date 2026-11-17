@@ -5,7 +5,7 @@ import { Shell } from "@/components/shell";
 
 export const metadata: Metadata = {
   description: "This page isn't part of the session. Head back to Sombre.",
-  title: "Page not found",
+  title: "page not found",
 };
 
 const Missing = () => (

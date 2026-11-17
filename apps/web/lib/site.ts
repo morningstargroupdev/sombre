@@ -2,10 +2,10 @@ export const site = {
   description:
     "Sombre runs Claude Code and Codex on your Mac. Open the same session on your phone and keep working while you're away from your desk.",
   email: "hello@sombre.ai",
-  name: "Sombre",
+  name: "sombre",
   repo: "https://github.com/visible/sombre",
   title:
-    "Sombre: run Claude Code and Codex on your Mac, continue from your phone",
+    "sombre: run claude code and codex on your mac, continue from your phone",
   url: "https://sombre.ai",
 } as const;
 
