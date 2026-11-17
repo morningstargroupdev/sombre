@@ -1,14 +1,15 @@
 import type { MetadataRoute } from "next";
 
+import { releases } from "@/lib/changelog";
 import { pages, site } from "@/lib/site";
 
 export default function sitemap(): MetadataRoute.Sitemap {
+  const updated = releases[0]?.date;
   return [
-    { changeFrequency: "monthly", priority: 1, url: site.url },
-    ...pages.map((page) => ({
-      changeFrequency: "monthly" as const,
-      priority: 0.8,
-      url: `${site.url}${page.href}`,
+    { lastModified: updated, url: site.url },
+    ...pages.map((entry) => ({
+      lastModified: updated,
+      url: `${site.url}${entry.href}`,
     })),
   ];
 }
