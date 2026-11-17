@@ -109,9 +109,7 @@ const Watch = ({ root, dot }: WatchProps) => {
       top = y;
       size = height;
       const tall = window.innerHeight;
-      away = desk
-        ? desk.getBoundingClientRect().bottom < tall * 0.62
-        : now || y > 96;
+      away = desk ? desk.getBoundingClientRect().bottom < tall * 0.62 : now;
       landed = ground ? ground.getBoundingClientRect().top < tall * 0.9 : false;
       for (const section of sections) {
         if (section.getBoundingClientRect().top < tall * 0.58) {
