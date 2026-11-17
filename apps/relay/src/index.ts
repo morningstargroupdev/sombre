@@ -4,6 +4,8 @@ import { GONE, refused } from "./room";
 
 export { Room } from "./room";
 
+const SITE = "https://sombre.ai";
+
 const guarded = (response: Response, url: URL) => {
   if (response.webSocket) {
     return response;
@@ -65,7 +67,7 @@ const answer = (request: Request, env: Env, url: URL) => {
   if (!found) {
     return request.headers.get("Upgrade")?.toLowerCase() === "websocket"
       ? refused(4404, GONE)
-      : text("not found", 404);
+      : Response.redirect(`${SITE}${url.pathname}${url.search}`, 308);
   }
   if (request.method === "GET" && found.action === "") {
     return page(env, url);
