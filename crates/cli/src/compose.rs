@@ -391,6 +391,7 @@ pub enum Read {
     Remote(String, Vec<std::path::PathBuf>),
     Interrupted,
     Cycle,
+    Woke,
     Eof,
 }
 
@@ -493,6 +494,7 @@ pub fn read(
     footer: &[String],
     grab: &mut dyn FnMut() -> Option<String>,
     cycle: &mut dyn FnMut() -> Option<Vec<String>>,
+    woke: &dyn Fn() -> bool,
 ) -> Read {
     if terminal::enable_raw_mode().is_err() {
         return Read::Eof;
@@ -505,6 +507,7 @@ pub fn read(
     let mut drawn = false;
     let mut remote: Option<crate::relay::Arrival> = None;
     let mut cycled = false;
+    let mut woken = false;
     let outcome = loop {
         let columns = view::width();
         let hint = (composer.cursor == composer.text.len() && !composer.text.contains('\n'))
@@ -554,6 +557,10 @@ pub fn read(
                 remote = Some(arrival);
                 break Some(Event::FocusGained);
             }
+            if woke() {
+                woken = true;
+                break Some(Event::FocusGained);
+            }
             if view::resized() {
                 replay();
                 drawn = false;
@@ -571,6 +578,7 @@ pub fn read(
         match event {
             Some(Event::FocusLost) => break None,
             Some(Event::FocusGained) if remote.is_some() => break Some(true),
+            Some(Event::FocusGained) if woken => break None,
             Some(Event::Paste(text)) => composer.paste(&text),
             Some(Event::Mouse(mouse)) => {
                 crate::pane::mouse(mouse);
@@ -635,6 +643,9 @@ pub fn read(
     let _ = terminal::disable_raw_mode();
     if cycled {
         return Read::Cycle;
+    }
+    if woken {
+        return Read::Woke;
     }
     if let (Some(true), Some(arrival)) = (outcome, remote) {
         view::typed(false, &arrival.text);

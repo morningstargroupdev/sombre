@@ -204,6 +204,7 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
                     Some(format!("[Image #{}]", held.len()))
                 };
                 let ready = footer(&engine);
+                let bell = engine.bell();
                 let mut unsaved = None;
                 let mut turn = || {
                     let next = upcoming(&engine)?;
@@ -218,6 +219,7 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
                     &ready,
                     &mut grab,
                     &mut turn,
+                    &|| bell.load(Ordering::SeqCst) > 0,
                 );
                 if let Some(problem) = unsaved {
                     view::failed(&problem);
@@ -242,6 +244,20 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
                     }
                     crate::compose::Read::Cycle => {
                         cycle(&mut engine, roots.as_ref());
+                        continue;
+                    }
+                    crate::compose::Read::Woke => {
+                        wake(
+                            &mut engine,
+                            &stop,
+                            Kept {
+                                carried: &mut carried,
+                                composer: &mut composer,
+                                draft: &mut draft,
+                                held: &mut held,
+                                pending: &mut pending,
+                            },
+                        );
                         continue;
                     }
                     crate::compose::Read::Eof => break,
@@ -290,6 +306,19 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
                     None => text,
                 };
                 let text = shell::attach(&text, &notes);
+                if engine.woke() {
+                    wake(
+                        &mut engine,
+                        &stop,
+                        Kept {
+                            carried: &mut carried,
+                            composer: &mut composer,
+                            draft: &mut draft,
+                            held: &mut held,
+                            pending: &mut pending,
+                        },
+                    );
+                }
                 crate::relay::said(&text, &engine.images);
                 notes.clear();
                 let (left, _) = turn(&mut engine, &text, &stop);
@@ -382,7 +411,7 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
             Input::Compact => match engine.compact() {
                 Ok(true) => {
                     view::line("");
-                    let (left, _) = watch(&mut engine, &stop);
+                    let (left, _) = watch(&mut engine, &stop, false);
                     carried = absorb(left, &mut pending, &mut draft, &mut held);
                     engine.left = None;
                 }
@@ -1577,10 +1606,27 @@ fn begin(
             },
         );
     }
-    watch(engine, stop)
+    watch(engine, stop, false)
 }
 
-fn watch(engine: &mut Engine, stop: &AtomicBool) -> (Draft, Outcome) {
+struct Kept<'a> {
+    composer: &'a mut crate::compose::Composer,
+    pending: &'a mut VecDeque<String>,
+    draft: &'a mut String,
+    held: &'a mut Vec<PathBuf>,
+    carried: &'a mut Vec<PathBuf>,
+}
+
+fn wake(engine: &mut Engine, stop: &AtomicBool, kept: Kept<'_>) {
+    view::line("");
+    let (left, _) = watch(engine, stop, true);
+    *kept.carried = absorb(left, kept.pending, kept.draft, kept.held);
+    if !kept.draft.is_empty() && !kept.composer.text.is_empty() {
+        *kept.draft = format!("{} {}", kept.composer.expand(), kept.draft);
+    }
+}
+
+fn watch(engine: &mut Engine, stop: &AtomicBool, woke: bool) -> (Draft, Outcome) {
     stop.store(false, Ordering::SeqCst);
     let steer = Roots::detect()
         .and_then(|roots| Config::load(&roots.sombre).ok())
@@ -1589,7 +1635,7 @@ fn watch(engine: &mut Engine, stop: &AtomicBool) -> (Draft, Outcome) {
     let mut dock = Dock::open(steer, footer(engine), models);
     let mut prose = view::Prose::default();
     let mut outcome = Outcome::default();
-    let stopped = pump(engine, stop, &mut dock, &mut prose, &mut outcome);
+    let stopped = pump(engine, stop, &mut dock, &mut prose, &mut outcome, woke);
     outcome.stopped = stopped;
     dock.hide();
     prose.finish();
@@ -1614,12 +1660,14 @@ fn pump(
     dock: &mut Dock,
     prose: &mut view::Prose,
     outcome: &mut Outcome,
+    woke: bool,
 ) -> bool {
     let started = Instant::now();
     let long = |started: Instant| started.elapsed() >= Duration::from_secs(15);
     let mut errors: Vec<String> = Vec::new();
     let mut streamed = false;
-    let mut ours = engine.agent != Agent::Claude;
+    let mut ours = woke || engine.agent != Agent::Claude;
+    let owed = usize::from(!woke);
     let mut halted = false;
     let mut steered = 0usize;
     let mut echoed = 0usize;
@@ -1880,7 +1928,7 @@ fn pump(
                         spent,
                         left,
                     );
-                    if engine.agent == Agent::Claude && echoed <= steered {
+                    if engine.agent == Agent::Claude && echoed < steered + owed {
                         continue;
                     }
                     return false;
