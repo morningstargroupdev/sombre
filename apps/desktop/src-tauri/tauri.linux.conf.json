@@ -1,0 +1,20 @@
+{
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "sombre",
+        "width": 1180,
+        "height": 780,
+        "minWidth": 720,
+        "minHeight": 480,
+        "center": true,
+        "theme": "Dark",
+        "backgroundColor": "#0f1011",
+        "decorations": false,
+        "shadow": true,
+        "backgroundThrottling": "disabled"
+      }
+    ]
+  }
+}
