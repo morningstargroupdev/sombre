@@ -157,9 +157,10 @@ pub fn level<'a>(effort: &str, allowed: &[&'a str]) -> Option<&'a str> {
 
 const RESERVED: [&str; 3] = ["claude", "codex", GATEWAY];
 
-pub const PRESETS: [(&str, &str, &str, bool); 6] = [
+pub const PRESETS: [(&str, &str, &str, bool); 7] = [
     ("ollama", "ollama", "http://localhost:11434/v1", true),
     ("lmstudio", "lm studio", "http://localhost:1234/v1", true),
+    ("cliproxy", "cliproxyapi", "http://localhost:8317/v1", false),
     ("openai", "openai", "https://api.openai.com/v1", false),
     (
         "anthropic",
