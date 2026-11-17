@@ -54,20 +54,6 @@ export const viewport: Viewport = {
   themeColor: "#edefef",
 };
 
-const data = JSON.stringify({
-  "@context": "https://schema.org",
-  "@type": "WebSite",
-  description: site.description,
-  name: site.name,
-  publisher: {
-    "@type": "Organization",
-    email: site.email,
-    name: site.name,
-    url: site.url,
-  },
-  url: site.url,
-}).replaceAll("<", "\\u003c");
-
 const RootLayout = ({ children }: LayoutProps<"/">) => (
   <html
     className={`${host.variable} ${plex.variable} antialiased`}
@@ -84,11 +70,6 @@ const RootLayout = ({ children }: LayoutProps<"/">) => (
         <Pocket />
         <Footer />
       </div>
-      <script
-        // oxlint-disable-next-line react/no-danger -- JSON-LD has to be inline
-        dangerouslySetInnerHTML={{ __html: data }}
-        type="application/ld+json"
-      />
       <Motion />
     </body>
   </html>
