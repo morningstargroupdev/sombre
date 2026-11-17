@@ -739,7 +739,10 @@ fn keep(session: &Session) {
     if session.saved.lock().is_ok_and(|saved| *saved == text) {
         return;
     }
-    if std::fs::write(&path, &text).is_ok()
+    if path
+        .parent()
+        .is_some_and(|folder| std::fs::create_dir_all(folder).is_ok())
+        && std::fs::write(&path, &text).is_ok()
         && sombre_harness::config::private(&path).is_ok()
         && let Ok(mut saved) = session.saved.lock()
     {
