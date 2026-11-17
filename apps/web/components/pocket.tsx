@@ -2,6 +2,7 @@
 
 import { gsap } from "gsap";
 import { usePathname } from "next/navigation";
+import type { RefObject } from "react";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 
 import { boot, still } from "@/lib/motion";
@@ -60,18 +61,12 @@ const Chip = ({ current }: { current: View }) => {
   return null;
 };
 
-export const Pocket = () => {
-  const pathname = usePathname();
-  const state = useSyncExternalStore(
-    session.subscribe,
-    session.read,
-    session.read
-  );
-  const root = useRef<HTMLElement>(null);
-  const dot = useRef<HTMLSpanElement>(null);
-  const current = view(state);
-  const note = aside(current);
+interface WatchProps {
+  root: RefObject<HTMLElement | null>;
+  dot: RefObject<HTMLSpanElement | null>;
+}
 
+const Watch = ({ root, dot }: WatchProps) => {
   useEffect(() => {
     boot();
     const node = root.current;
@@ -131,8 +126,21 @@ export const Pocket = () => {
       gsap.ticker.remove(tick);
       pulse?.kill();
     };
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- sections change with the page
-  }, [pathname]);
+  }, [root, dot]);
+  return null;
+};
+
+export const Pocket = () => {
+  const pathname = usePathname();
+  const state = useSyncExternalStore(
+    session.subscribe,
+    session.read,
+    session.read
+  );
+  const root = useRef<HTMLElement>(null);
+  const dot = useRef<HTMLSpanElement>(null);
+  const current = view(state);
+  const note = aside(current);
 
   useEffect(() => {
     if (!state.running) {
@@ -145,49 +153,55 @@ export const Pocket = () => {
   }, [state.running]);
 
   return (
-    <aside aria-label="Example session" className="pocket" inert ref={root}>
-      <div className="bg-ink text-sheet flex h-12 items-center gap-3 rounded-full pr-2 pl-4 shadow-[0_18px_40px_-14px_rgb(15_16_17/0.55),0_4px_10px_-4px_rgb(15_16_17/0.3)] ring-1 ring-white/10">
-        <span aria-hidden="true" className="relative flex size-2 shrink-0">
-          <span className="bg-ember absolute inset-0 rounded-full" ref={dot} />
-          <span className="bg-ember relative size-2 rounded-full" />
-        </span>
-        <span className="text-fog flex shrink-0 items-center gap-1.5 font-mono text-[11px] tabular-nums">
-          <svg
-            aria-hidden="true"
-            className="size-3.5"
-            fill="none"
-            stroke="currentColor"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="1.3"
-            viewBox="0 0 16 16"
-          >
-            <path d={glyphs[current.device]} />
-          </svg>
-          {current.time}
-        </span>
-        <div
-          aria-live={current.replay ? "off" : "polite"}
-          className="min-w-0 flex-1 overflow-clip text-[13px] font-medium"
-        >
-          <span
-            className={`pocket-line block truncate ${current.busy ? "pocket-busy" : ""}`}
-            key={current.title}
-          >
-            {current.title}
+    <>
+      <Watch dot={dot} key={pathname} root={root} />
+      <aside aria-label="Example session" className="pocket" inert ref={root}>
+        <div className="bg-ink text-sheet flex h-12 items-center gap-3 rounded-full pr-2 pl-4 shadow-[0_18px_40px_-14px_rgb(15_16_17/0.55),0_4px_10px_-4px_rgb(15_16_17/0.3)] ring-1 ring-white/10">
+          <span aria-hidden="true" className="relative flex size-2 shrink-0">
+            <span
+              className="bg-ember absolute inset-0 rounded-full"
+              ref={dot}
+            />
+            <span className="bg-ember relative size-2 rounded-full" />
           </span>
+          <span className="text-fog flex shrink-0 items-center gap-1.5 font-mono text-[11px] tabular-nums">
+            <svg
+              aria-hidden="true"
+              className="size-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1.3"
+              viewBox="0 0 16 16"
+            >
+              <path d={glyphs[current.device]} />
+            </svg>
+            {current.time}
+          </span>
+          <div
+            aria-live={current.replay ? "off" : "polite"}
+            className="min-w-0 flex-1 overflow-clip text-[13px] font-medium"
+          >
+            <span
+              className={`pocket-line block truncate ${current.busy ? "pocket-busy" : ""}`}
+              key={current.title}
+            >
+              {current.title}
+            </span>
+          </div>
+          {note ? (
+            <span
+              className="pocket-line text-fog shrink-0 font-mono text-[11px] max-[420px]:hidden"
+              key={note}
+            >
+              {note}
+            </span>
+          ) : null}
+          <Chip current={current} />
+          {current.chip ? null : <span aria-hidden="true" className="w-2" />}
         </div>
-        {note ? (
-          <span
-            className="pocket-line text-fog shrink-0 font-mono text-[11px] max-[420px]:hidden"
-            key={note}
-          >
-            {note}
-          </span>
-        ) : null}
-        <Chip current={current} />
-        {current.chip ? null : <span aria-hidden="true" className="w-2" />}
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 };
