@@ -1,0 +1,944 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="theme-color" content="#0f1011" />
+    <meta name="color-scheme" content="dark" />
+    <title>sombre</title>
+    <style>
+      :root {
+        --ink: #0f1011;
+        --raise: #161819;
+        --well: #1c1f20;
+        --rim: #272a2c;
+        --paper: #edefef;
+        --body: #c3c8ca;
+        --fog: #9aa0a3;
+        --ember: #ff5b14;
+        --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        background: var(--ink);
+        color: var(--body);
+        font: 14px/1.65 var(--mono);
+        -webkit-text-size-adjust: 100%;
+        -webkit-tap-highlight-color: transparent;
+      }
+      ::selection {
+        background: var(--ember);
+        color: var(--ink);
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        padding-bottom: calc(var(--dock, 122px) + 12px + var(--keyboard, 0px));
+      }
+      button,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+      :focus-visible {
+        outline: 1px solid var(--paper);
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .mark {
+        margin: 0;
+        color: var(--ember);
+        font-size: 11px;
+        line-height: 12px;
+        letter-spacing: 0;
+        white-space: pre;
+        user-select: none;
+      }
+      header {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        max-width: 640px;
+        margin: 0 auto;
+        padding: calc(22px + env(safe-area-inset-top)) 18px 6px;
+      }
+      .who {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        line-height: 1.45;
+      }
+      #name {
+        color: var(--paper);
+        font-weight: 600;
+      }
+      #meta,
+      #status {
+        overflow: hidden;
+        font-size: 12.5px;
+        text-overflow: ellipsis;
+        white-space: pre;
+      }
+      #meta {
+        color: var(--body);
+      }
+      #status {
+        color: var(--fog);
+      }
+      #status::before {
+        content: "● ";
+        color: var(--rim);
+      }
+      body[data-state="live"] #status::before,
+      body[data-state="working"] #status::before {
+        color: var(--ember);
+      }
+      #banner {
+        position: sticky;
+        top: calc(10px + env(safe-area-inset-top));
+        z-index: 2;
+        display: block;
+        width: calc(100% - 36px);
+        max-width: 604px;
+        margin: 12px auto 0;
+        padding: 9px 14px;
+        border: 1px solid var(--rim);
+        border-radius: 10px;
+        background: var(--raise);
+        color: var(--paper);
+        text-align: left;
+        cursor: pointer;
+      }
+      #banner::before {
+        content: "● ";
+        color: var(--ember);
+      }
+      main {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 20px 18px;
+      }
+      #feed {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        transition: opacity 160ms ease-out;
+      }
+      body:not([data-ready]) #feed {
+        opacity: 0;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #feed {
+          transition: none;
+        }
+      }
+      #feed > * {
+        margin: 0;
+      }
+      .empty {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        align-items: center;
+        padding: 88px 24px;
+        color: var(--fog);
+        text-align: center;
+      }
+      .empty .mark {
+        margin-bottom: 18px;
+        font-size: 16px;
+        line-height: 17px;
+      }
+      .empty strong {
+        color: var(--paper);
+        font-weight: 600;
+      }
+      .you {
+        display: grid;
+        grid-template-columns: 2ch 1fr;
+        row-gap: 8px;
+        color: var(--paper);
+      }
+      #feed > .you:not(:first-child) {
+        margin-top: 14px;
+      }
+      .you .state {
+        grid-column: 2;
+        margin-top: -4px;
+        color: var(--fog);
+        font-size: 12px;
+      }
+      .you.pending p {
+        color: var(--body);
+      }
+      .you.failed .state {
+        color: var(--paper);
+      }
+      .you::before {
+        content: "❯";
+        color: var(--ember);
+      }
+      .you p {
+        grid-column: 2;
+        margin: 0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .pics {
+        display: flex;
+        grid-column: 2;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .pics img {
+        width: 104px;
+        height: 104px;
+        object-fit: cover;
+      }
+      .chip {
+        padding: 0 6px;
+        border: 1px solid var(--rim);
+        border-radius: 4px;
+        color: var(--fog);
+        font-size: 12.5px;
+      }
+      .tile {
+        display: block;
+        padding: 0;
+        border: 1px solid var(--rim);
+        border-radius: 8px;
+        background: var(--raise);
+        overflow: hidden;
+        cursor: zoom-in;
+      }
+      .tile,
+      #tray .thumb {
+        position: relative;
+      }
+      .number {
+        position: absolute;
+        bottom: 5px;
+        left: 5px;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 10px;
+        background: var(--ink);
+        color: var(--paper);
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 20px;
+        text-align: center;
+        pointer-events: none;
+      }
+      .tile img {
+        display: block;
+        max-width: 100%;
+      }
+      figure.pic {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        align-items: flex-start;
+        padding-left: 2ch;
+      }
+      figure.pic img {
+        max-height: 300px;
+      }
+      figcaption {
+        color: var(--fog);
+        font-size: 12px;
+      }
+      .say {
+        padding-left: 2ch;
+        overflow-wrap: anywhere;
+      }
+      .say > * {
+        margin: 0 0 12px;
+      }
+      .say > :last-child {
+        margin-bottom: 0;
+      }
+      .say h3,
+      .say h4 {
+        margin-top: 20px;
+        color: var(--paper);
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .say > :first-child {
+        margin-top: 0;
+      }
+      .say strong {
+        color: var(--paper);
+        font-weight: 600;
+      }
+      .say em {
+        color: var(--paper);
+      }
+      .say a {
+        color: var(--paper);
+        text-decoration-color: var(--fog);
+        text-underline-offset: 3px;
+      }
+      .say a:hover {
+        text-decoration-color: var(--ember);
+      }
+      .say ul,
+      .say ol {
+        padding-left: 2ch;
+      }
+      .say ul {
+        list-style: none;
+      }
+      .say ul li::before {
+        content: "•";
+        display: inline-block;
+        width: 2ch;
+        margin-left: -2ch;
+        color: var(--fog);
+      }
+      .say ol li::marker {
+        color: var(--fog);
+      }
+      .say li + li {
+        margin-top: 4px;
+      }
+      .say code {
+        padding: 0 3px;
+        border-radius: 3px;
+        background: var(--raise);
+        color: var(--paper);
+        font-size: 13px;
+      }
+      .say blockquote {
+        padding-left: 12px;
+        border-left: 1px solid var(--rim);
+        color: var(--fog);
+      }
+      .say hr {
+        width: 100%;
+        margin: 10px 0;
+        border: 0;
+        border-top: 1px solid var(--rim);
+      }
+      .code figcaption {
+        margin-bottom: 4px;
+      }
+      .code pre {
+        margin: 0;
+        padding: 2px 0 2px 12px;
+        border-left: 1px solid var(--rim);
+        color: var(--paper);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .say .code code {
+        padding: 0;
+        background: none;
+        font-size: 13px;
+      }
+      .grid {
+        overflow-x: auto;
+        border: 1px solid var(--rim);
+        border-radius: 8px;
+      }
+      .grid table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .grid th,
+      .grid td {
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--rim);
+        text-align: left;
+        vertical-align: top;
+      }
+      .grid th {
+        color: var(--paper);
+        font-weight: 600;
+      }
+      .grid tr:last-child td {
+        border-bottom: 0;
+      }
+      .work {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding-left: 2ch;
+      }
+      .tally {
+        display: flex;
+        gap: 1ch;
+        align-items: baseline;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: none;
+        color: var(--paper);
+        font-weight: 600;
+        text-align: left;
+        white-space: pre-wrap;
+        cursor: pointer;
+      }
+      .tally::before {
+        content: "■";
+        color: var(--ember);
+        font-weight: 400;
+      }
+      .tally::after {
+        content: "▸";
+        color: var(--fog);
+        font-size: 11px;
+        font-weight: 400;
+      }
+      .tally[aria-expanded="true"]::after {
+        content: "▾";
+      }
+      .tally:hover::after {
+        color: var(--body);
+      }
+      .act {
+        display: grid;
+        grid-template-columns: 1ch auto 1fr;
+        column-gap: 1ch;
+      }
+      .act::before {
+        content: "■";
+        color: var(--ember);
+      }
+      .act .verb {
+        min-width: 4ch;
+        color: var(--paper);
+        font-weight: 600;
+      }
+      .act .detail {
+        width: 100%;
+        min-width: 0;
+        margin: 0;
+        padding: 0 0 0 1ch;
+        overflow: hidden;
+        border: 0;
+        background: none;
+        color: var(--fog);
+        text-align: left;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .act .detail:hover {
+        color: var(--body);
+      }
+      .act.open .detail {
+        color: var(--body);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .act .verb:last-child {
+        grid-column: 2 / 4;
+      }
+      .act pre {
+        grid-column: 2 / 4;
+        margin: 2px 0 0;
+        color: var(--fog);
+        font: inherit;
+        font-size: 12.5px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .act pre::before {
+        content: "└ ";
+      }
+      .act .more {
+        grid-column: 2 / 4;
+        justify-self: start;
+        margin: 0 0 4px 2ch;
+        padding: 0;
+        border: 0;
+        background: none;
+        color: var(--fog);
+        font-size: 12.5px;
+        cursor: pointer;
+      }
+      .act .more:hover {
+        color: var(--body);
+      }
+      .done {
+        margin-top: -6px !important;
+        padding-left: 2ch;
+        color: var(--fog);
+        font-size: 12.5px;
+        white-space: pre-wrap;
+      }
+      .ring {
+        width: 12px;
+        height: 12px;
+        vertical-align: -1px;
+      }
+      .ring .track {
+        stroke: var(--rim);
+      }
+      .ring .used {
+        stroke: var(--fog);
+      }
+      .ring.low .used {
+        stroke: var(--ember);
+      }
+      .printed {
+        padding-left: 2ch;
+        color: var(--body);
+        font: inherit;
+        font-size: 12.5px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .note {
+        padding-left: 2ch;
+        color: var(--fog);
+      }
+      .oops {
+        padding-left: 2ch;
+        color: var(--paper);
+        overflow-wrap: anywhere;
+      }
+      .oops::before {
+        content: "✕ ";
+        color: var(--ember);
+      }
+      .plan {
+        padding-left: 2ch;
+      }
+      .plan p {
+        margin: 0 0 4px;
+        color: var(--paper);
+        font-weight: 600;
+      }
+      .plan p::before {
+        content: "■ ";
+        color: var(--ember);
+      }
+      .plan ol {
+        margin: 0;
+        padding: 0 0 0 2ch;
+        list-style: none;
+      }
+      .plan li {
+        display: grid;
+        grid-template-columns: 2ch 1fr;
+        color: var(--fog);
+      }
+      .plan li::before {
+        content: "·";
+      }
+      .plan .completed {
+        text-decoration: line-through;
+        text-decoration-color: var(--rim);
+      }
+      .plan .completed::before {
+        content: "✓";
+        color: var(--ember);
+      }
+      .plan .in_progress {
+        color: var(--paper);
+      }
+      .plan .in_progress::before {
+        content: "›";
+        color: var(--ember);
+      }
+      .ask {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-left: 2ch !important;
+        padding: 14px;
+        border: 1px solid var(--rim);
+        border-radius: 12px;
+        background: var(--raise);
+      }
+      .ask > * {
+        margin: 0;
+      }
+      .ask h2 {
+        color: var(--paper);
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .ask pre {
+        padding: 10px 12px;
+        overflow-x: auto;
+        border-radius: 8px;
+        background: var(--ink);
+        color: var(--paper);
+        font: inherit;
+        font-size: 13px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .diff span {
+        display: block;
+      }
+      .diff .gone {
+        color: var(--fog);
+        text-decoration: line-through;
+        text-decoration-color: var(--rim);
+      }
+      .choices {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .key {
+        min-height: 44px;
+        padding: 0 16px;
+        border: 1px solid var(--rim);
+        border-radius: 10px;
+        background: transparent;
+        color: var(--paper);
+        cursor: pointer;
+        transition:
+          background-color 120ms,
+          border-color 120ms;
+      }
+      .key:hover {
+        border-color: var(--fog);
+      }
+      .key:active {
+        background: var(--well);
+      }
+      .key.yes {
+        border-color: var(--ember);
+        background: var(--ember);
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .key.yes:hover {
+        background: #ff6d2e;
+      }
+      .key.yes:active {
+        background: #e85010;
+      }
+      .key:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      .said {
+        color: var(--paper);
+      }
+      .said::before {
+        content: "✔ ";
+        color: var(--ember);
+      }
+      .said.no {
+        color: var(--fog);
+      }
+      .said.no::before {
+        content: "✕ ";
+        color: var(--fog);
+      }
+      form {
+        position: fixed;
+        inset: auto 0 var(--keyboard, 0px);
+        z-index: 2;
+        padding: 0 18px calc(10px + env(safe-area-inset-bottom));
+        background: var(--ink);
+      }
+      .dock {
+        max-width: 604px;
+        margin: 0 auto;
+      }
+      .rule {
+        display: flex;
+        gap: 1ch;
+        align-items: center;
+        height: 24px;
+        color: var(--fog);
+        font-size: 12.5px;
+      }
+      .rule::after {
+        content: "";
+        flex: 1;
+        border-top: 1px solid var(--rim);
+      }
+      .rule:has(#rule:not(:empty))::before {
+        content: "";
+        width: 2ch;
+        border-top: 1px solid var(--rim);
+      }
+      #rule:not(:empty)::before {
+        content: "● ";
+        color: var(--ember);
+      }
+      body[data-state="connecting"] #rule::before,
+      body[data-state="off"] #rule::before {
+        color: var(--fog);
+      }
+      .field {
+        display: grid;
+        grid-template-columns: 2ch 1fr auto auto;
+        align-items: end;
+        min-height: 40px;
+        padding: 4px 0;
+      }
+      .field > .prompt {
+        padding-bottom: 7px;
+        color: var(--ember);
+      }
+      textarea {
+        min-height: 32px;
+        max-height: 36dvh;
+        padding: 5px 0;
+        border: 0;
+        background: none;
+        color: var(--paper);
+        font-size: 16px;
+        line-height: 1.4;
+        resize: none;
+      }
+      textarea:focus-visible {
+        outline: none;
+      }
+      textarea {
+        scrollbar-width: none;
+      }
+      textarea::-webkit-scrollbar {
+        display: none;
+      }
+      textarea::placeholder {
+        color: var(--fog);
+      }
+      .buttons {
+        display: flex;
+        gap: 6px;
+        padding-bottom: 2px;
+      }
+      #attach {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        min-height: 32px;
+        margin: 0 6px 2px;
+        padding: 0;
+        color: var(--fog);
+      }
+      #attach:hover {
+        color: var(--paper);
+      }
+      #attach svg {
+        width: 16px;
+        height: 16px;
+      }
+      #tray {
+        display: flex;
+        gap: 10px;
+        padding: 8px 0 2px 2ch;
+        overflow-x: auto;
+      }
+      #tray .thumb {
+        position: relative;
+        flex: none;
+      }
+      #tray img {
+        display: block;
+        width: 56px;
+        height: 56px;
+        border: 1px solid var(--rim);
+        border-radius: 8px;
+        object-fit: cover;
+      }
+      #tray .drop {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border: 1px solid var(--rim);
+        border-radius: 50%;
+        background: var(--raise);
+        color: var(--paper);
+        font-size: 12px;
+        line-height: 1;
+        cursor: pointer;
+      }
+      .buttons .key {
+        min-height: 32px;
+        padding: 0 10px;
+        font-size: 12.5px;
+      }
+      #send {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        padding: 0;
+      }
+      body[data-state="working"] #send {
+        width: auto;
+        padding: 0 10px;
+      }
+      #send svg {
+        width: 14px;
+        height: 14px;
+      }
+      #footer {
+        display: flex;
+        gap: 2ch;
+        align-items: center;
+        justify-content: space-between;
+        margin: 0;
+        padding-left: 2ch;
+        color: var(--fog);
+        font-size: 12.5px;
+      }
+      #footer .brand {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+      }
+      #footer svg {
+        width: 14px;
+        height: 14px;
+      }
+      #footer .where {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      body:not([data-typed]) .buttons {
+        display: none;
+      }
+      .sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      #latest {
+        position: fixed;
+        right: 18px;
+        bottom: calc(var(--dock, 122px) - 10px + var(--keyboard, 0px));
+        z-index: 2;
+        padding: 6px 12px;
+        border: 1px solid var(--rim);
+        border-radius: 999px;
+        background: var(--raise);
+        color: var(--paper);
+        font-size: 12.5px;
+        cursor: pointer;
+      }
+      #latest:hover {
+        border-color: var(--fog);
+      }
+      #viewer {
+        position: fixed;
+        inset: 0;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        padding: 16px;
+        border: 0;
+        background: rgb(15 16 17 / 0.94);
+        cursor: zoom-out;
+      }
+      #viewer img {
+        max-width: 100%;
+        max-height: 100%;
+        border-radius: 8px;
+      }
+    </style>
+  </head>
+  <body data-state="connecting">
+    <header>
+      <pre class="mark" aria-hidden="true">
+⠀⠀⣄⠀⣶⠀⣠⠀⠀
+⠲⣄⡘⢆⣿⡰⢃⣠⠖
+⣀⣀⣉⣃⣀⣘⣉⣀⣀</pre>
+      <div class="who">
+        <strong id="name">sombre</strong>
+        <span id="meta"></span>
+        <span id="status" role="status">connecting</span>
+      </div>
+    </header>
+    <button type="button" id="banner" hidden>
+      approval waiting · tap to see it
+    </button>
+    <main>
+      <div id="feed" aria-live="polite"></div>
+    </main>
+    <form id="composer" hidden>
+      <div class="dock">
+        <div class="rule"><span id="rule"></span></div>
+        <div id="tray" hidden></div>
+        <div class="field">
+          <span class="prompt" aria-hidden="true">❯</span>
+          <label for="message" class="sr">message</label>
+          <textarea
+            id="message"
+            rows="1"
+            placeholder="message the agent"
+            enterkeyhint="send"
+          ></textarea>
+          <button type="button" id="attach" class="key" aria-label="add photos">
+            <svg aria-hidden="true" fill="none" viewBox="0 0 16 16">
+              <rect
+                x="2"
+                y="3"
+                width="12"
+                height="10"
+                rx="2"
+                stroke="currentColor"
+                stroke-width="1.5"
+              />
+              <circle cx="6" cy="7" r="1.2" fill="currentColor" />
+              <path
+                d="m3 12 3.5-3.5 2.5 2.5 1.5-1.5L13 12"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <input type="file" id="picker" accept="image/*" multiple hidden />
+          <div class="buttons">
+            <button type="button" id="queue" class="key" hidden>queue</button>
+            <button type="submit" id="send" class="key yes" aria-label="send">
+              <svg aria-hidden="true" fill="none" viewBox="0 0 16 16">
+                <path
+                  d="M8 13V3M3.5 7.5 8 3l4.5 4.5"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <p id="footer"></p>
+      </div>
+    </form>
+    <button type="button" id="latest" hidden>↓ new</button>
+    <button type="button" id="viewer" aria-label="close image" hidden>
+      <img alt="" />
+    </button>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
