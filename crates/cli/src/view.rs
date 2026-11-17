@@ -58,6 +58,7 @@ enum Entry {
     Beside(Vec<String>),
     Help,
     Line(String),
+    Steered(String),
     Pairing(String, crate::relay::Reach),
     Typed(bool, String),
     Stepped,
@@ -350,6 +351,29 @@ pub fn pairing(url: &str, reach: crate::relay::Reach) {
     put("");
 }
 
+pub fn steered(text: &str) {
+    keep(Entry::Steered(text.to_string()));
+    for row in steering(text, width()) {
+        put(&row);
+    }
+}
+
+fn steering(text: &str, columns: usize) -> Vec<String> {
+    let room = columns.saturating_sub(6).max(10);
+    crate::compose::rows(text, room)
+        .into_iter()
+        .enumerate()
+        .map(|(index, range)| {
+            let lead = if index == 0 {
+                ember("↳")
+            } else {
+                " ".to_string()
+            };
+            format!("  {lead} {}", &text[range]).trim_end().to_string()
+        })
+        .collect()
+}
+
 pub fn typed(shell: bool, text: &str) {
     keep(Entry::Typed(shell, text.to_string()));
     for line in crate::compose::lines(text, shell, None, width()) {
@@ -389,6 +413,7 @@ fn show(entry: Entry) {
         Entry::Beside(side) => beside(&side),
         Entry::Help => help(),
         Entry::Line(text) => put(&text),
+        Entry::Steered(text) => steered(&text),
         Entry::Pairing(url, reach) => pairing(&url, reach),
         Entry::Typed(shell, text) => typed(shell, &text),
         Entry::Stepped => stepped(),
@@ -1296,6 +1321,15 @@ pub fn help() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn steered_messages_wrap_under_their_marker() {
+        let rows: Vec<String> = steering("first line here\n\nsecond one", 20)
+            .iter()
+            .map(|row| sombre_core::scrub::scrub(row))
+            .collect();
+        assert_eq!(rows, ["  ↳ first line", "    here", "", "    second one"]);
+    }
 
     #[test]
     fn wraps_at_spaces_so_commands_stay_whole() {

@@ -1701,23 +1701,27 @@ fn pump(
             dock.draw();
         }
         let pressed = dock.keys();
-        if let Action::Steer(text) = &pressed {
+        if let Action::Steer(messages) = &pressed {
             dock.hide();
             streak.settle(false, &engine.cwd);
-            let images: Vec<PathBuf> = dock
-                .draft
-                .images
-                .iter()
-                .enumerate()
-                .filter(|(index, _)| text.contains(&format!("[Image #{}]", index + 1)))
-                .map(|(_, path)| path.clone())
-                .collect();
-            if engine.steer(text, &images).unwrap_or(false) {
+            let text = messages.join("\n\n");
+            let pictured = |part: &str| -> Vec<PathBuf> {
+                dock.draft
+                    .images
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| part.contains(&format!("[Image #{}]", index + 1)))
+                    .map(|(_, path)| path.clone())
+                    .collect()
+            };
+            if engine.steer(&text, &pictured(&text)).unwrap_or(false) {
                 steered += 1;
-                crate::relay::said(text, &images);
-                view::line(&format!("  {} {text}", view::ember("↳")));
+                for message in messages {
+                    crate::relay::said(message, &pictured(message));
+                    view::steered(message);
+                }
             } else {
-                dock.draft.queued.push(text.clone());
+                dock.draft.queued.extend(messages.iter().cloned());
                 view::note(&format!(
                     "{} can't take a message mid-turn here, so it's queued for after",
                     engine.name()
@@ -2069,7 +2073,7 @@ fn nudge(engine: &mut Engine, text: &str, held: Vec<PathBuf>) -> bool {
     if !engine.steer(&said, &images).unwrap_or(false) {
         return false;
     }
-    view::line(&format!("  {} {said}", view::ember("↳")));
+    view::steered(&said);
     crate::relay::said(&said, &images);
     true
 }

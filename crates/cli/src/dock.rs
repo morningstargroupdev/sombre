@@ -92,7 +92,7 @@ pub struct Draft {
 pub enum Action {
     Stop,
     Typed,
-    Steer(String),
+    Steer(Vec<String>),
     Image,
     Cycle,
     Nothing,
@@ -148,10 +148,10 @@ impl Draft {
             if messages.is_empty() {
                 return Action::Nothing;
             }
-            return Action::Steer(messages.join("\n\n"));
+            return Action::Steer(messages);
         }
         if now && !command(&text) {
-            return Action::Steer(text);
+            return Action::Steer(vec![text]);
         }
         self.queued.push(text);
         Action::Nothing
@@ -528,7 +528,7 @@ mod tests {
         queue.editor.set("now");
         assert_eq!(
             press(&mut queue, KeyCode::Tab),
-            Action::Steer("now".to_string())
+            Action::Steer(vec!["now".to_string()])
         );
         let mut steer = Draft {
             steer: true,
@@ -537,7 +537,7 @@ mod tests {
         steer.editor.set("now");
         assert_eq!(
             press(&mut steer, KeyCode::Enter),
-            Action::Steer("now".to_string())
+            Action::Steer(vec!["now".to_string()])
         );
         steer.editor.set("later");
         press(&mut steer, KeyCode::Tab);
@@ -565,7 +565,7 @@ mod tests {
         assert_eq!(draft.queued.len(), 2);
         assert_eq!(
             press(&mut draft, KeyCode::Tab),
-            Action::Steer("one\n\ntwo".to_string())
+            Action::Steer(vec!["one".to_string(), "two".to_string()])
         );
         assert!(draft.queued.is_empty());
         let mut steer = Draft {
@@ -576,7 +576,7 @@ mod tests {
         assert_eq!(press(&mut steer, KeyCode::Tab), Action::Nothing);
         assert_eq!(
             press(&mut steer, KeyCode::Enter),
-            Action::Steer("later".to_string())
+            Action::Steer(vec!["later".to_string()])
         );
     }
 
@@ -598,7 +598,7 @@ mod tests {
         press(&mut draft, KeyCode::Enter);
         assert_eq!(
             press(&mut draft, KeyCode::Tab),
-            Action::Steer("and tests".to_string())
+            Action::Steer(vec!["and tests".to_string()])
         );
         assert_eq!(draft.queued, ["/model opus"]);
         let lines = Draft {
