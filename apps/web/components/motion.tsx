@@ -1,12 +1,9 @@
 "use client";
 
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
-import { boot, enter, leave, reveal, scroll } from "@/lib/motion";
-
-type Mode = "idle" | "pop" | "push";
+import { arrive, depart, leave, popped, stall } from "@/lib/motion";
 
 const plain = (event: MouseEvent) =>
   event.button === 0 &&
@@ -32,12 +29,16 @@ const internal = (event: MouseEvent) => {
   return same ? `${url.pathname}${url.search}${url.hash}` : null;
 };
 
+const Arrival = () => {
+  useEffect(() => {
+    arrive();
+  }, []);
+  return null;
+};
+
 export const Motion = () => {
   const router = useRouter();
   const pathname = usePathname();
-  const mode = useRef<Mode>("idle");
-  const first = useRef(true);
-  const rescue = useRef(0);
 
   useEffect(() => {
     const click = async (event: MouseEvent) => {
@@ -46,60 +47,21 @@ export const Motion = () => {
         return;
       }
       event.preventDefault();
-      if (mode.current === "push") {
+      if (!depart()) {
         return;
       }
-      mode.current = "push";
-      window.clearTimeout(rescue.current);
       router.prefetch(href);
       await leave();
       router.push(href, { scroll: false });
-      rescue.current = window.setTimeout(() => {
-        if (mode.current === "push") {
-          mode.current = "idle";
-          enter();
-        }
-      }, 4000);
-    };
-    const pop = () => {
-      mode.current = "pop";
+      stall();
     };
     document.addEventListener("click", click, true);
-    window.addEventListener("popstate", pop);
+    window.addEventListener("popstate", popped);
     return () => {
       document.removeEventListener("click", click, true);
-      window.removeEventListener("popstate", pop);
+      window.removeEventListener("popstate", popped);
     };
   }, [router]);
 
-  useEffect(() => {
-    boot();
-    window.clearTimeout(rescue.current);
-    const pushed = mode.current === "push";
-    mode.current = "idle";
-    if (first.current) {
-      first.current = false;
-    } else if (pushed) {
-      const { hash } = window.location;
-      scroll(hash && document.querySelector(hash) ? hash : 0, true);
-      enter();
-    }
-    let undo: (() => void) | null = null;
-    let live = true;
-    const ready = async () => {
-      await document.fonts.ready;
-      if (live) {
-        undo = reveal();
-        ScrollTrigger.refresh();
-      }
-    };
-    void ready();
-    return () => {
-      live = false;
-      undo?.();
-    };
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- runs again for every page
-  }, [pathname]);
-
-  return null;
+  return <Arrival key={pathname} />;
 };

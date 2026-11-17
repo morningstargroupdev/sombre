@@ -60,35 +60,39 @@ const split = (node: HTMLElement) => {
 };
 
 export const reveal = () => {
-  if (still()) {
-    return () => {
-      /* nothing was set up */
-    };
-  }
-  const context = gsap.context(() => {
-    for (const node of document.querySelectorAll<HTMLElement>("[data-split]")) {
-      split(node);
-    }
-    for (const node of document.querySelectorAll<HTMLElement>("[data-rule]")) {
-      gsap.from(node, {
-        duration: 1.4,
-        ease: ease.out,
-        scaleX: 0,
-        scrollTrigger: { once: true, start: "top 94%", trigger: node },
-        transformOrigin: "left center",
+  boot();
+  const context = still()
+    ? null
+    : gsap.context(() => {
+        for (const node of document.querySelectorAll<HTMLElement>(
+          "[data-split]"
+        )) {
+          split(node);
+        }
+        for (const node of document.querySelectorAll<HTMLElement>(
+          "[data-rule]"
+        )) {
+          gsap.from(node, {
+            duration: 1.4,
+            ease: ease.out,
+            scaleX: 0,
+            scrollTrigger: { once: true, start: "top 94%", trigger: node },
+            transformOrigin: "left center",
+          });
+        }
+        for (const node of document.querySelectorAll<HTMLElement>(
+          "[data-rise]"
+        )) {
+          gsap.from(node, {
+            autoAlpha: 0,
+            duration: 1,
+            ease: ease.out,
+            scrollTrigger: { once: true, start: "top 92%", trigger: node },
+            y: 28,
+          });
+        }
       });
-    }
-    for (const node of document.querySelectorAll<HTMLElement>("[data-rise]")) {
-      gsap.from(node, {
-        autoAlpha: 0,
-        duration: 1,
-        ease: ease.out,
-        scrollTrigger: { once: true, start: "top 92%", trigger: node },
-        y: 28,
-      });
-    }
-  });
-  return () => context.revert();
+  return () => context?.revert();
 };
 
 const stage = () => document.querySelector<HTMLElement>("#stage");
@@ -124,4 +128,43 @@ export const enter = () => {
       x: 0,
     }
   );
+};
+
+type Mode = "idle" | "pop" | "push";
+
+let mode: Mode = "idle";
+let rescue = 0;
+
+export const depart = () => {
+  if (mode === "push") {
+    return false;
+  }
+  mode = "push";
+  window.clearTimeout(rescue);
+  return true;
+};
+
+export const popped = () => {
+  mode = "pop";
+};
+
+export const stall = () => {
+  rescue = window.setTimeout(() => {
+    if (mode === "push") {
+      mode = "idle";
+      enter();
+    }
+  }, 4000);
+};
+
+export const arrive = () => {
+  boot();
+  window.clearTimeout(rescue);
+  const pushed = mode === "push";
+  mode = "idle";
+  if (pushed) {
+    const { hash } = window.location;
+    scroll(hash && document.querySelector(hash) ? hash : 0, true);
+    enter();
+  }
 };

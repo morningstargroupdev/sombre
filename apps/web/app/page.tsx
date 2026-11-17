@@ -2,6 +2,7 @@ import { Faq } from "@/components/faq";
 import { Features } from "@/components/features";
 import { Hero } from "@/components/hero";
 import { History } from "@/components/history";
+import { Reveal } from "@/components/reveal";
 import { Schema } from "@/components/schema";
 import { Statement } from "@/components/statement";
 import { Steps } from "@/components/steps";
@@ -15,6 +16,7 @@ const Home = () => (
     <Statement />
     <Features />
     <Faq />
+    <Reveal />
   </main>
 );
 

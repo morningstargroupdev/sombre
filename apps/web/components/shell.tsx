@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { Reveal } from "@/components/reveal";
 import { Tag } from "@/components/tag";
 
 interface Fact {
@@ -52,5 +53,6 @@ export const Shell = ({ facts, tag, title, lead, children }: Props) => (
       </div>
     </section>
     {children}
+    <Reveal />
   </main>
 );
