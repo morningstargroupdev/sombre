@@ -1972,6 +1972,9 @@ fn pair(engine: &Engine, roots: Option<&Roots>, command: &str) {
                         }
                     }
                     view::pairing(&url, reach);
+                    if crate::clipboard::copy(&url) {
+                        view::note("the link is on your clipboard too");
+                    }
                 }
                 Err(problem) => view::failed(&problem),
             }
