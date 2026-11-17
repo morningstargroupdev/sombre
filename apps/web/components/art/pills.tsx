@@ -1,5 +1,3 @@
-import type { CSSProperties } from "react";
-
 export interface Row {
   indent: number;
   widths: readonly number[];
@@ -34,12 +32,10 @@ export const Pills = ({ rows, numbers = false, unit = 4 }: Props) => (
             className={`h-2 shrink-0 rounded-full ${tones[(line + column) % tones.length]}`}
             data-type=""
             key={`${line}-${column}-${width}`}
-            style={
-              {
-                "--i": line + column * 0.4,
-                width: `${width * unit}px`,
-              } as CSSProperties
-            }
+            style={{
+              "--i": line + column * 0.4,
+              width: `${width * unit}px`,
+            }}
           />
         ))}
       </div>

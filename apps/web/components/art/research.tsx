@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { Live, Phone, Window } from "@/components/art/frame";
 import { Chip } from "@/components/art/terminal";
@@ -26,7 +26,7 @@ const Step = ({
   <div
     className="relative grid grid-cols-[14px_1fr] gap-x-2"
     data-line=""
-    style={{ "--i": at } as CSSProperties}
+    style={{ "--i": at }}
   >
     {last ? null : (
       <span className="bg-line absolute top-[18px] -bottom-[4px] left-[6.5px] w-px" />
@@ -62,7 +62,7 @@ const Trace = ({ small = false }: Props) => (
     <p
       className="text-ink mb-1.5 flex items-center gap-2 font-medium"
       data-line=""
-      style={{ "--i": 0 } as CSSProperties}
+      style={{ "--i": 0 }}
     >
       Thinking
       <span className="text-meta font-mono font-normal">4s</span>

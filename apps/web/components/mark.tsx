@@ -1,5 +1,3 @@
-import type { CSSProperties } from "react";
-
 import { rays } from "@/lib/rays";
 
 interface Props {
@@ -31,7 +29,7 @@ export const Mark = ({ className }: Props) => (
         <line
           data-spoke=""
           key={`${line.x2}-${line.y2}`}
-          style={{ "--i": Math.abs(index - middle) } as CSSProperties}
+          style={{ "--i": Math.abs(index - middle) }}
           x1={line.x1}
           x2={line.x2}
           y1={line.y1}

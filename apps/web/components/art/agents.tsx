@@ -1,5 +1,3 @@
-import type { CSSProperties } from "react";
-
 import { Window } from "@/components/art/frame";
 import { Lines } from "@/components/art/terminal";
 import type { Line } from "@/components/art/terminal";
@@ -30,7 +28,7 @@ export const Agents = () => (
       <div
         className="relative my-1.5 ml-5 font-mono text-[11.5px]"
         data-line=""
-        style={{ "--i": before.length } as CSSProperties}
+        style={{ "--i": before.length }}
       >
         <span
           className="bg-paper ring-line absolute inset-x-0 top-0 h-[30px] rounded-md ring-1"

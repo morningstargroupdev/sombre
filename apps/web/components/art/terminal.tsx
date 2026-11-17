@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import type { Tone } from "@/lib/terminal";
 
@@ -44,7 +44,7 @@ export const Lines = ({ lines, start = 0, size = "regular" }: Props) => (
         className="flex items-start gap-2 whitespace-nowrap"
         data-line=""
         key={`${line.tone}-${index}`}
-        style={{ "--i": start + index } as CSSProperties}
+        style={{ "--i": start + index }}
       >
         <span className="flex w-3 shrink-0 justify-center">
           {glyphs[line.tone]}
@@ -64,7 +64,7 @@ export const Caret = ({ at }: { at: number }) => (
   <p
     className="flex items-center gap-2 font-mono text-[11.5px] leading-[22px]"
     data-line=""
-    style={{ "--i": at } as CSSProperties}
+    style={{ "--i": at }}
   >
     <span className="text-ink flex w-3 justify-center font-medium">
       &#x276F;
@@ -72,7 +72,7 @@ export const Caret = ({ at }: { at: number }) => (
     <span
       className="bg-ink block h-[14px] w-[7px]"
       data-caret=""
-      style={{ "--i": at } as CSSProperties}
+      style={{ "--i": at }}
     />
   </p>
 );
