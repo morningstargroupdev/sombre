@@ -35,6 +35,8 @@ import {
   marked,
   restored,
   said,
+  steering,
+  told,
   waiting,
 } from "./live";
 
@@ -334,18 +336,21 @@ export const unqueue = (key: string) => {
 
 export const hurry = async (key: string, agent: Agent, text: string) => {
   const live = read(key);
-  const message =
-    text.trim() === ""
-      ? live.queue.map((queued) => queued.text).join("\n\n")
-      : text;
+  const flushing = text.trim() === "";
+  const { message, sent } = flushing
+    ? steering(live.queue)
+    : { message: text, sent: [{ images: [], text }] };
   if (message.trim() === "" || !live.busy) {
     return false;
   }
   try {
     if (await steer(key, message)) {
       write(key, (current) => ({
-        ...said(current, message, true),
-        queue: text.trim() === "" ? [] : current.queue,
+        ...told(
+          current,
+          sent.map((queued) => queued.text)
+        ),
+        queue: flushing ? steering(current.queue).kept : current.queue,
       }));
       return true;
     }

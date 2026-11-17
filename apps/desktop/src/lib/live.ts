@@ -210,6 +210,23 @@ export const said = (
   images: string[] = []
 ): Live => push(live, { images, kind: "user", steered, text });
 
+export const told = (live: Live, texts: string[]) => {
+  let next = live;
+  for (const text of texts) {
+    next = said(next, text, true);
+  }
+  return next;
+};
+
+export const steering = (queue: Queued[]) => {
+  const sent = queue.filter((queued) => queued.images.length === 0);
+  return {
+    kept: queue.filter((queued) => queued.images.length > 0),
+    message: sent.map((queued) => queued.text).join("\n\n"),
+    sent,
+  };
+};
+
 export const marked = (text: string, count: number) =>
   [
     text,

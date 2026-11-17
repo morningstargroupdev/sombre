@@ -12,6 +12,7 @@ import {
   restored,
   said,
   seconds,
+  steering,
   waiting,
 } from "./live";
 
@@ -232,5 +233,22 @@ describe("images", () => {
       kind: "user",
       text: "look",
     });
+  });
+});
+
+describe("steering", () => {
+  test("sends text now and keeps messages with images for after the turn", () => {
+    const picture = { path: "/tmp/a.png", src: "data:image/png;base64,x" };
+    const { kept, message, sent } = steering([
+      { images: [], text: "first" },
+      { images: [picture], text: "look at this" },
+      { images: [], text: "second\n\nwith a gap" },
+    ]);
+    expect(message).toBe("first\n\nsecond\n\nwith a gap");
+    expect(sent.map((queued) => queued.text)).toEqual([
+      "first",
+      "second\n\nwith a gap",
+    ]);
+    expect(kept.map((queued) => queued.text)).toEqual(["look at this"]);
   });
 });
