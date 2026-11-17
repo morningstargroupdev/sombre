@@ -450,7 +450,13 @@ impl Runner {
             }
             Ask::Stop if self.busy => {
                 self.engine.stop();
-                self.note("stopped");
+                if !self
+                    .goal
+                    .as_ref()
+                    .is_some_and(|current| current.status == Status::Active)
+                {
+                    self.note("stopped");
+                }
                 self.gate.stopped();
                 self.ended();
             }
@@ -689,7 +695,11 @@ impl Runner {
                 next = Some(goal::onward(&objective));
             }
         }
-        self.note(current.summary());
+        self.note(if outcome.stopped {
+            format!("stopped. {}", current.summary())
+        } else {
+            current.summary()
+        });
         let going = current.status == Status::Active;
         self.goal = Some(current);
         match next {

@@ -23,6 +23,7 @@ use sombre_engine::shell;
 use sombre_engine::{Engine, Next, about, covers, fallback, kept, recorded};
 
 static TRUSTED: AtomicBool = AtomicBool::new(false);
+static AIMING: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Input {
@@ -657,6 +658,21 @@ fn verify(objective: &str, cwd: &Path, stop: &AtomicBool) -> Option<(String, Str
 }
 
 fn pursue(engine: &mut Engine, current: &mut Goal, stop: &AtomicBool, first: bool) -> Draft {
+    AIMING.store(true, Ordering::SeqCst);
+    let left = chase(engine, current, stop, first);
+    AIMING.store(false, Ordering::SeqCst);
+    left
+}
+
+fn progress(current: &Goal, stopped: bool) -> String {
+    if stopped {
+        format!("stopped. {}", current.summary())
+    } else {
+        current.summary()
+    }
+}
+
+fn chase(engine: &mut Engine, current: &mut Goal, stop: &AtomicBool, first: bool) -> Draft {
     view::line("");
     if engine.native() {
         let (left, outcome) = if engine.agent == Agent::Claude {
@@ -672,7 +688,7 @@ fn pursue(engine: &mut Engine, current: &mut Goal, stop: &AtomicBool, first: boo
         current.native(&outcome, || {
             verify(&objective, &engine.cwd, stop).map(|(command, _)| command)
         });
-        view::note(&current.summary());
+        view::note(&progress(current, outcome.stopped));
         return left;
     }
     engine.goal = Some(current.objective.clone());
@@ -701,7 +717,7 @@ fn pursue(engine: &mut Engine, current: &mut Goal, stop: &AtomicBool, first: boo
             if current.started.elapsed() >= Duration::from_secs(15) {
                 view::notify(&current.summary());
             }
-            view::note(&current.summary());
+            view::note(&progress(current, outcome.stopped));
             return left;
         }
         let nudge = goal::onward(&current.objective);
@@ -1748,7 +1764,9 @@ fn pump(
             final_plan(&mut latest, &engine.cwd);
             prose.finish();
             engine.stop();
-            view::note("stopped");
+            if !AIMING.load(Ordering::SeqCst) {
+                view::note("stopped");
+            }
             return true;
         }
         if view::resized() {
