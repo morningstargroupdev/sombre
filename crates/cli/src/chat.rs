@@ -340,14 +340,17 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
                         None
                     }
                     goal::Command::Clear => {
-                        if target.take().is_some() && engine.native() {
-                            if engine.agent == Agent::Claude {
-                                let _ = turn(&mut engine, "/goal clear", &stop);
-                            } else if let Err(error) = engine.unaim() {
-                                view::failed(&format!("couldn't clear codex's goal: {error}"));
-                            }
+                        if target.take().is_none() {
+                            view::note("there's no goal to clear");
+                        } else if engine.agent == Agent::Claude {
+                            let _ = turn(&mut engine, "/goal clear", &stop);
+                        } else if engine.native()
+                            && let Err(error) = engine.unaim()
+                        {
+                            view::failed(&format!("couldn't clear codex's goal: {error}"));
+                        } else {
+                            view::note("goal cleared");
                         }
-                        view::note("goal cleared");
                         None
                     }
                     goal::Command::Pause => {

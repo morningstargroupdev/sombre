@@ -329,6 +329,7 @@ struct Runner {
     errors: Vec<String>,
     started: Instant,
     busy: bool,
+    clearing: bool,
     goal: Option<Goal>,
     halt: Arc<AtomicBool>,
     before: Option<String>,
@@ -375,6 +376,11 @@ impl Runner {
 
     fn ended(&mut self) {
         self.compare();
+        if std::mem::take(&mut self.clearing) {
+            self.settle();
+            self.unaim();
+            return;
+        }
         if !self.advance() {
             self.settle();
         }
@@ -542,9 +548,9 @@ impl Runner {
                 None => self.note("there's no goal to pause"),
             },
             goal::Command::Clear => self.clear(),
-            goal::Command::Resume | goal::Command::Set(_) if self.busy => self.emit(Update::Failed {
-                text: "wait for this turn to finish, or stop it first".to_string(),
-            }),
+            goal::Command::Resume | goal::Command::Set(_) if self.busy => {
+                self.note("wait for this turn to finish, or stop it first");
+            }
             goal::Command::Resume => match self.goal.as_mut() {
                 Some(current) if current.status != Status::Complete => {
                     current.status = Status::Active;
@@ -572,15 +578,21 @@ impl Runner {
             self.note("there's no goal to clear");
             return;
         }
-        if self.busy && self.engine.native() {
-            self.emit(Update::Failed {
-                text: "stop the turn first, then clear the goal".to_string(),
-            });
-            return;
-        }
         self.goal = None;
         self.engine.goal = None;
-        self.note("goal cleared");
+        if self.busy && self.engine.native() {
+            self.clearing = true;
+            self.note("the goal clears once this turn ends");
+        } else {
+            if self.engine.agent != Agent::Claude {
+                self.note("goal cleared");
+            }
+            self.unaim();
+        }
+        self.state();
+    }
+
+    fn unaim(&mut self) {
         if self.engine.agent == Agent::Claude {
             self.send("/goal clear");
         } else if self.engine.agent == Agent::Codex
@@ -952,6 +964,7 @@ impl Live {
         let cwd = engine.cwd.clone();
         let runner = Runner {
             busy: false,
+            clearing: false,
             errors: Vec::new(),
             gate: Gate::new(engine.agent, &engine.cwd),
             engine,
