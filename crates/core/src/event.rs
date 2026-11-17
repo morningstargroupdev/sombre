@@ -202,6 +202,11 @@ pub fn claude(line: &str) -> Vec<Event> {
                 entry["api_error_code"].as_str(),
             ))]
         }
+        Some("result") if entry["num_turns"] == 0 => vec![Event::Done {
+            cost: None,
+            left: None,
+            millis: Some(0),
+        }],
         Some("result") => vec![Event::Done {
             cost: entry["total_cost_usd"].as_f64(),
             left: left(&entry),
@@ -709,6 +714,20 @@ mod tests {
                 r#"{"type":"result","subtype":"error_during_execution","is_error":true,"result":""}"#
             ),
             vec![Event::Failed("the turn failed".to_string())]
+        );
+    }
+
+    #[test]
+    fn claude_local_commands_finish_without_a_summary() {
+        assert_eq!(
+            claude(
+                r#"{"type":"result","subtype":"success","is_error":false,"result":"No goal set","duration_ms":16,"duration_api_ms":0,"num_turns":0,"total_cost_usd":0.0018}"#
+            ),
+            vec![Event::Done {
+                cost: None,
+                left: None,
+                millis: Some(0)
+            }]
         );
     }
 

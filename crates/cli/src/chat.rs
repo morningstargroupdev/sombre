@@ -1927,13 +1927,15 @@ fn pump(
                         "left": left,
                         "millis": millis.or(elapsed),
                     }));
-                    view::done(
-                        engine.name(),
-                        engine.label.as_deref(),
-                        millis.or(elapsed),
-                        spent,
-                        left,
-                    );
+                    if millis != Some(0) || spent.is_some() {
+                        view::done(
+                            engine.name(),
+                            engine.label.as_deref(),
+                            millis.or(elapsed),
+                            spent,
+                            left,
+                        );
+                    }
                     if engine.agent == Agent::Claude && echoed < steered + owed {
                         continue;
                     }
