@@ -41,11 +41,24 @@ describe("markdown", () => {
     ).toEqual(["text", "code", "text", "strong", "text", "em", "text", "link"]);
   });
 
-  test("ignores links that are not http", () => {
-    const [block] = markdown("[click](javascript:alert(1))");
+  test("shows only the label of links that are not http, and never makes them clickable", () => {
+    const [script] = markdown("[click](javascript:alert(1))");
     expect(
-      block?.kind === "paragraph" ? block.spans.map((span) => span.kind) : []
-    ).toEqual(["text"]);
+      script?.kind === "paragraph" ? script.spans.map((span) => span.kind) : []
+    ).toEqual(["path", "text"]);
+    const [file] = markdown(
+      "Created [notes.md](/work/notes.md) with three bullets"
+    );
+    expect(file?.kind === "paragraph" ? file.spans : []).toEqual([
+      { key: expect.any(Number), kind: "text", text: "Created " },
+      {
+        href: "/work/notes.md",
+        key: expect.any(Number),
+        kind: "path",
+        text: "notes.md",
+      },
+      { key: expect.any(Number), kind: "text", text: " with three bullets" },
+    ]);
   });
 
   test("joins wrapped list lines and spots ordered lists", () => {

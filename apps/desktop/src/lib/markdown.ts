@@ -4,6 +4,7 @@ export type Span =
   | { kind: "strong"; key: number; text: string }
   | { kind: "em"; key: number; text: string }
   | { kind: "link"; key: number; text: string; href: string }
+  | { kind: "path"; key: number; text: string; href: string }
   | { kind: "break"; key: number }
   | { kind: "rule"; key: number };
 
@@ -22,7 +23,7 @@ export type Block =
   | { kind: "table"; key: number; rows: { key: number; cells: Row[] }[] };
 
 const INLINE =
-  /`(?<code>[^`]+)`|\*\*(?<strong>[^*]+)\*\*|\*(?<em>[^*\s][^*]*)\*|\[(?<label>[^\]]+)\]\((?<href>https?:\/\/[^\s)]+)\)/gu;
+  /`(?<code>[^`]+)`|\*\*(?<strong>[^*]+)\*\*|\*(?<em>[^*\s][^*]*)\*|\[(?<label>[^\]]+)\]\((?<href>[^\s)]+)\)/gu;
 const ITEM = /^\s*(?:[-*+]|\d+[.)])\s+/u;
 const HEADING = /^(?<marks>#{1,6})\s+(?<title>.*)$/u;
 const RULE = /^(?:-{3,}|\*{3,}|_{3,})\s*$/u;
@@ -77,7 +78,7 @@ export const markdown = (source: string): Block[] => {
         spans.push({
           href: groups.href,
           key: key(),
-          kind: "link",
+          kind: /^https?:\/\//u.test(groups.href) ? "link" : "path",
           text: groups.label,
         });
       }

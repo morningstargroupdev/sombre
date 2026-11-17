@@ -55,6 +55,13 @@ const Inline = ({ spans }: { spans: Span[] }) =>
           </a>
         );
       }
+      case "path": {
+        return (
+          <span className="text-paper" key={span.key} title={span.href}>
+            {span.text}
+          </span>
+        );
+      }
       default: {
         return span.text;
       }
