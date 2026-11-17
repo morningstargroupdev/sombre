@@ -925,7 +925,10 @@ fn paint(spans: &[Span]) -> String {
             Span::Plain(text) => text.clone(),
             Span::Strong(text) | Span::Code(text) => bold(text),
             Span::Emphasis(text) => italic(text),
-            Span::Link(label, url) => format!("{label} {}", dim(&format!("({url})"))),
+            Span::Link(label, url) if url.starts_with("https://") || url.starts_with("http://") => {
+                format!("{label} {}", dim(&format!("({url})")))
+            }
+            Span::Link(label, _) => label.clone(),
         })
         .collect()
 }
@@ -1321,6 +1324,23 @@ pub fn help() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_links_show_by_name_and_web_links_keep_their_address() {
+        let local = paint(&[Span::Link(
+            "notes.md".to_string(),
+            "/work/notes.md".to_string(),
+        )]);
+        assert_eq!(sombre_core::scrub::scrub(&local), "notes.md");
+        let web = paint(&[Span::Link(
+            "docs".to_string(),
+            "https://sombre.ai/docs".to_string(),
+        )]);
+        assert_eq!(
+            sombre_core::scrub::scrub(&web),
+            "docs (https://sombre.ai/docs)"
+        );
+    }
 
     #[test]
     fn steered_messages_wrap_under_their_marker() {
