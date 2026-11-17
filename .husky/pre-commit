@@ -13,9 +13,14 @@ if printf '%s\n' "$FULL" | grep -qx bun.lock; then
   perl -pi -e 's#"https://[^"]+/-/[^"]+\.tgz"#""#g' bun.lock
 fi
 CODE=0
-git diff --cached --name-only -z --diff-filter=ACMR | xargs -0 bunx ultracite fix || CODE=$?
+FORMATTED=$(printf '%s\n' "$STAGED" | grep -E '\.(js|jsx|ts|tsx|mjs|cjs|mts|cts|json|jsonc|css|md|mdx|html|yml|yaml|toml)$' || true)
+if [ -n "$FORMATTED" ]; then
+  printf '%s\n' "$FORMATTED" | tr '\n' '\0' | xargs -0 bunx ultracite fix || CODE=$?
+fi
 printf '%s\n' "$FULL" | while IFS= read -r file; do
-  [ -f "$file" ] && git add -- "$file"
+  if [ -f "$file" ]; then
+    git add -- "$file"
+  fi
 done
 if [ -n "$PARTIAL" ]; then
   echo "Fixes to partially staged files were left unstaged:"
