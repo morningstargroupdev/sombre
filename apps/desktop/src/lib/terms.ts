@@ -9,9 +9,23 @@ export interface Shell {
   fit: FitAddon;
   box: HTMLDivElement;
   alive: boolean;
+  ended: (() => void) | null;
+  run: number;
 }
 
+const QUICK = 1000;
+
 const shells = new Map<string, Shell>();
+
+export const drop = (key: string) => {
+  const found = shells.get(key);
+  if (found) {
+    found.run += 1;
+  }
+  hangup(key).catch(() => null);
+  found?.term.dispose();
+  shells.delete(key);
+};
 
 const token = (name: string) =>
   getComputedStyle(document.documentElement)
@@ -32,13 +46,24 @@ const theme = () => ({
 
 const begin = async (key: string, folder: string, shell: Shell) => {
   shell.alive = true;
+  shell.run += 1;
+  const { run } = shell;
+  const started = Date.now();
   const { term } = shell;
   const listen = (out: Out) => {
+    if (shell.run !== run) {
+      return;
+    }
     if (out.kind === "data") {
       term.write(out.text);
       return;
     }
     shell.alive = false;
+    if (out.code === 0 || Date.now() - started > QUICK) {
+      shell.ended?.();
+      drop(key);
+      return;
+    }
     term.write(
       `\r\n\u001B[2mshell ended${out.code === null ? "" : ` with code ${out.code}`}. restart it from the bar above\u001B[0m\r\n`
     );
@@ -72,7 +97,7 @@ export const shell = (key: string, folder: string) => {
   const fit = new FitAddon();
   term.loadAddon(fit);
   term.open(box);
-  const made: Shell = { alive: false, box, fit, term };
+  const made: Shell = { alive: false, box, ended: null, fit, run: 0, term };
   term.onData((data) => {
     if (made.alive) {
       input(key, data).catch(() => null);
@@ -90,16 +115,13 @@ export const shell = (key: string, folder: string) => {
 
 export const restart = async (key: string, folder: string) => {
   const found = shells.get(key);
+  if (found) {
+    found.run += 1;
+  }
   await hangup(key).catch(() => null);
   if (found) {
     found.term.reset();
+    found.term.focus();
     begin(key, folder, found);
   }
-};
-
-export const drop = (key: string) => {
-  const found = shells.get(key);
-  hangup(key).catch(() => null);
-  found?.term.dispose();
-  shells.delete(key);
 };

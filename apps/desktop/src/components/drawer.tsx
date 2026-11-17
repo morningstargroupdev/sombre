@@ -16,7 +16,25 @@ interface Props {
 
 export const Drawer = ({ chatKey, folder, place, onClose }: Props) => {
   const box = useRef<HTMLDivElement>(null);
+  const closing = useRef(onClose);
+  const before = useRef(document.activeElement);
   const [height, setHeight] = useState(START);
+
+  useEffect(() => {
+    const previous = before.current;
+    return () => {
+      const lost =
+        document.activeElement === null ||
+        document.activeElement === document.body;
+      if (lost && previous instanceof HTMLElement && previous.isConnected) {
+        previous.focus();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    closing.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     const element = box.current;
@@ -24,6 +42,7 @@ export const Drawer = ({ chatKey, folder, place, onClose }: Props) => {
       return;
     }
     const found = shell(chatKey, folder);
+    found.ended = () => closing.current();
     element.append(found.box);
     const fit = () => found.fit.fit();
     fit();
@@ -31,6 +50,7 @@ export const Drawer = ({ chatKey, folder, place, onClose }: Props) => {
     const watcher = new ResizeObserver(fit);
     watcher.observe(element);
     return () => {
+      found.ended = null;
       watcher.disconnect();
       found.box.remove();
     };
