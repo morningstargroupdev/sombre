@@ -179,7 +179,7 @@ impl Gate {
         self.outcome = Outcome::default();
     }
 
-    pub fn woke(&mut self) {
+    pub fn own(&mut self) {
         self.begin();
         self.ours = true;
         self.sent = 0;
@@ -481,11 +481,14 @@ impl Runner {
 
     fn send(&mut self, text: &str) {
         self.start(|engine| engine.send(text));
+        if self.engine.agent == Agent::Claude && text.trim_start().starts_with('/') {
+            self.gate.own();
+        }
     }
 
     fn wake(&mut self) {
         self.start(|_| Ok(()));
-        self.gate.woke();
+        self.gate.own();
     }
 
     fn start(&mut self, begin: impl FnOnce(&mut Engine) -> io::Result<()>) {
@@ -1031,7 +1034,7 @@ mod tests {
     #[test]
     fn a_turn_the_agent_starts_itself_ends_at_its_own_done() {
         let mut gate = Gate::new(Agent::Claude, Path::new("/work"));
-        gate.woke();
+        gate.own();
         assert!(matches!(
             gate.pass(Event::Text("finished".to_string())),
             Pass::Show(Update::Text { .. })

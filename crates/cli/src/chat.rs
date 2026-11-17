@@ -662,7 +662,7 @@ fn pursue(engine: &mut Engine, current: &mut Goal, stop: &AtomicBool, first: boo
         let (left, outcome) = if engine.agent == Agent::Claude {
             turn(engine, &format!("/goal {}", current.objective), stop)
         } else {
-            begin(engine, stop, |engine| engine.aim(&current.objective))
+            begin(engine, stop, false, |engine| engine.aim(&current.objective))
         };
         if outcome.refused {
             engine.pause();
@@ -1584,12 +1584,14 @@ fn model(engine: &mut Engine, roots: Option<&Roots>, name: String) {
 }
 
 fn turn(engine: &mut Engine, text: &str, stop: &AtomicBool) -> (Draft, Outcome) {
-    begin(engine, stop, |engine| engine.send(text))
+    let owned = engine.agent == Agent::Claude && text.trim_start().starts_with('/');
+    begin(engine, stop, owned, |engine| engine.send(text))
 }
 
 fn begin(
     engine: &mut Engine,
     stop: &AtomicBool,
+    owned: bool,
     start: impl FnOnce(&mut Engine) -> io::Result<()>,
 ) -> (Draft, Outcome) {
     stop.store(false, Ordering::SeqCst);
@@ -1606,7 +1608,7 @@ fn begin(
             },
         );
     }
-    watch(engine, stop, false)
+    watch(engine, stop, owned)
 }
 
 struct Kept<'a> {
@@ -1626,7 +1628,7 @@ fn wake(engine: &mut Engine, stop: &AtomicBool, kept: Kept<'_>) {
     }
 }
 
-fn watch(engine: &mut Engine, stop: &AtomicBool, woke: bool) -> (Draft, Outcome) {
+fn watch(engine: &mut Engine, stop: &AtomicBool, owned: bool) -> (Draft, Outcome) {
     stop.store(false, Ordering::SeqCst);
     let steer = Roots::detect()
         .and_then(|roots| Config::load(&roots.sombre).ok())
@@ -1635,7 +1637,7 @@ fn watch(engine: &mut Engine, stop: &AtomicBool, woke: bool) -> (Draft, Outcome)
     let mut dock = Dock::open(steer, footer(engine), models);
     let mut prose = view::Prose::default();
     let mut outcome = Outcome::default();
-    let stopped = pump(engine, stop, &mut dock, &mut prose, &mut outcome, woke);
+    let stopped = pump(engine, stop, &mut dock, &mut prose, &mut outcome, owned);
     outcome.stopped = stopped;
     dock.hide();
     prose.finish();
@@ -1660,14 +1662,14 @@ fn pump(
     dock: &mut Dock,
     prose: &mut view::Prose,
     outcome: &mut Outcome,
-    woke: bool,
+    owned: bool,
 ) -> bool {
     let started = Instant::now();
     let long = |started: Instant| started.elapsed() >= Duration::from_secs(15);
     let mut errors: Vec<String> = Vec::new();
     let mut streamed = false;
-    let mut ours = woke || engine.agent != Agent::Claude;
-    let owed = usize::from(!woke);
+    let mut ours = owned || engine.agent != Agent::Claude;
+    let owed = usize::from(!owned);
     let mut halted = false;
     let mut steered = 0usize;
     let mut echoed = 0usize;
