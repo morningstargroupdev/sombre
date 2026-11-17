@@ -24,20 +24,34 @@
 
 > status?
 
-  early development. this repo is the landing page for now.
+  early, and usable every day. the desktop app, cli, and phone
+  page all run claude code, codex, and sombre's own agent today.
 
 > stack?
 
-  next.js · typescript · tailwind · bun
+  apps/web        next.js · typescript · tailwind · bun     the site
+  apps/desktop    tauri · react · typescript · tailwind     the desktop app
+  crates/core     rust                                      session index and readers
+  crates/harness  rust                                      sombre's own agent
+  crates/engine   rust                                      runs a chat with any agent
+  crates/cli      rust                                      the sombre cli
 
 > develop?
 
   bun install
-  bun dev
-  bun run verify      lint, types, unit, build
+  bun run dev                  the site
+  bun run desktop              the desktop app, with live reload
+  bun run app                  build the desktop app
+  cargo run -p sombre -- ls    the cli
+  bun run fix                  format and fix lint
+  bun run verify               lint, types, tests, and every build
 
 > links?
 
   https://sombre.ai
   https://sombre.si
+
+> license?
+
+  mit, see LICENSE
 ```
