@@ -210,6 +210,10 @@ fn explain(text: &str, code: Option<&str>) -> String {
         .unwrap_or_else(|| plain.to_string());
     match code {
         Some("model_not_available") => format!("{plain} Pick another model to keep going."),
+        _ if plain.starts_with("Not logged in") => {
+            "Claude Code isn't signed in. Run claude in a terminal and sign in, then send this again."
+                .to_string()
+        }
         _ => plain,
     }
 }
@@ -724,7 +728,8 @@ mod tests {
                 r#"{"type":"result","subtype":"success","is_error":true,"result":"Not logged in · Please run /login"}"#
             ),
             vec![Event::Failed(
-                "Not logged in · Please run /login".to_string()
+                "Claude Code isn't signed in. Run claude in a terminal and sign in, then send this again."
+                    .to_string()
             )]
         );
     }
